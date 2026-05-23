@@ -634,3 +634,179 @@ export const mockConversation: Conversation = {
     },
   ],
 };
+
+// -------------------------------------------------------
+// Second conversation — DP / algorithms focus
+// -------------------------------------------------------
+
+export const mockRuns2: Record<string, AgentRun> = {
+  "run-04": {
+    run_id: "run-04",
+    conversation_id: "conv-02",
+    message_id: "msg-b02",
+    tree_id: "example-cs",
+    query: "How does dynamic programming differ from recursion?",
+    model: "gpt-4o-mini",
+    status: "completed",
+    cursor_id: "cs.algorithms.dp",
+    visited_ids: ["cs", "cs.algorithms", "cs.algorithms.dp"],
+    stop_reason: "leaf",
+    started_at: "2026-05-24T09:00:00Z",
+    finished_at: "2026-05-24T09:00:02Z",
+    trace: [
+      {
+        step_idx: 0,
+        node_id: "cs",
+        messages_in: [
+          { role: "system", content: "You are a routing agent." },
+          {
+            role: "user",
+            content: `<context><node id="cs"><children><child id="cs.languages">Languages</child><child id="cs.algorithms">Algorithms</child><child id="cs.systems">Systems</child></children></node></context>\n\nQuery: How does dynamic programming differ from recursion?`,
+          },
+        ],
+        raw_output: `<decision><reasoning>Dynamic programming is an algorithmic technique. "Algorithms" subtree is correct.</reasoning><action>descend</action><target>cs.algorithms</target><confidence>0.93</confidence></decision>`,
+        thinking: { text: "DP is an algorithmic paradigm. 'Algorithms' subtree covers this, not Languages or Systems." },
+        decision: { kind: "descend", child_id: "cs.algorithms", reasoning: "DP is an algorithmic technique.", confidence: 0.93 },
+        model: "gpt-4o-mini",
+        latency_ms: 290,
+        input_tokens: 390,
+        output_tokens: 48,
+      },
+      {
+        step_idx: 1,
+        node_id: "cs.algorithms",
+        messages_in: [
+          { role: "system", content: "You are a routing agent." },
+          {
+            role: "user",
+            content: `<context><node id="cs.algorithms"><children><child id="cs.algorithms.graphs">Graph Algorithms</child><child id="cs.algorithms.dp">Dynamic Programming — Memoization, tabulation, optimal substructure</child></children></node></context>\n\nQuery: How does dynamic programming differ from recursion?`,
+          },
+        ],
+        raw_output: `<decision><reasoning>"Dynamic Programming" child is an exact match.</reasoning><action>descend</action><target>cs.algorithms.dp</target><confidence>0.99</confidence></decision>`,
+        thinking: { text: "The child literally says 'Dynamic Programming'. Trivial routing decision." },
+        decision: { kind: "descend", child_id: "cs.algorithms.dp", reasoning: "Exact name match.", confidence: 0.99 },
+        model: "gpt-4o-mini",
+        latency_ms: 240,
+        input_tokens: 360,
+        output_tokens: 38,
+      },
+    ],
+    answer: {
+      messages_in: [
+        { role: "system", content: "Answer using the provided context." },
+        { role: "user", content: `<context><node id="cs.algorithms.dp" title="Dynamic Programming"><detail>Breaks a problem into overlapping subproblems. Top-down (memoization) caches recursive calls; bottom-up (tabulation) fills a table iteratively.</detail></node></context>\n\nQuestion: How does dynamic programming differ from recursion?` },
+      ],
+      raw_output: "## Dynamic Programming vs Recursion\n\nRecursion is a technique; DP is an optimization strategy that uses recursion (or iteration) plus *memoization*...",
+      final_text: "## Dynamic Programming vs Recursion\n\n**Recursion** is a technique where a function calls itself to solve smaller subproblems. It's elegant but can be exponentially slow when the same subproblems are solved repeatedly.\n\n**Dynamic Programming** is an *optimization strategy* that eliminates redundant work by storing results:\n\n| | Pure Recursion | Dynamic Programming |\n|---|---|---|\n| Subproblems | Recomputed | Stored (memoized or tabulated) |\n| Time | Often exponential | Polynomial |\n| Space | Call stack | DP table or memo dict |\n\n**Two flavors:**\n- **Top-down (memoization):** Write the natural recursion, then add a cache (`@functools.lru_cache` in Python). Same call structure, no redundant work.\n- **Bottom-up (tabulation):** Iteratively fill a table from base cases upward. Avoids call-stack overhead.\n\n**Rule of thumb:** if your recursive solution recomputes the same `(args)` multiple times, DP turns it from O(2ⁿ) to O(n²) or better. Classic problems: Fibonacci, Knapsack, LCS, Coin Change.",
+      model: "gpt-4o-mini",
+      latency_ms: 890,
+      input_tokens: 440,
+      output_tokens: 195,
+    },
+    final_answer: "## Dynamic Programming vs Recursion\n\n**Recursion** is a technique where a function calls itself to solve smaller subproblems. It's elegant but can be exponentially slow when the same subproblems are solved repeatedly.\n\n**Dynamic Programming** is an *optimization strategy* that eliminates redundant work by storing results:\n\n| | Pure Recursion | Dynamic Programming |\n|---|---|---|\n| Subproblems | Recomputed | Stored (memoized or tabulated) |\n| Time | Often exponential | Polynomial |\n| Space | Call stack | DP table or memo dict |\n\n**Two flavors:**\n- **Top-down (memoization):** Write the natural recursion, then add a cache (`@functools.lru_cache` in Python). Same call structure, no redundant work.\n- **Bottom-up (tabulation):** Iteratively fill a table from base cases upward. Avoids call-stack overhead.\n\n**Rule of thumb:** if your recursive solution recomputes the same `(args)` multiple times, DP turns it from O(2ⁿ) to O(n²) or better. Classic problems: Fibonacci, Knapsack, LCS, Coin Change.",
+  },
+  "run-05": {
+    run_id: "run-05",
+    conversation_id: "conv-02",
+    message_id: "msg-b04",
+    tree_id: "example-cs",
+    query: "What's the difference between process and thread scheduling in an OS?",
+    model: "gpt-4o-mini",
+    status: "completed",
+    cursor_id: "cs.systems.os",
+    visited_ids: ["cs", "cs.systems", "cs.systems.os"],
+    stop_reason: "leaf",
+    started_at: "2026-05-24T09:02:00Z",
+    finished_at: "2026-05-24T09:02:02Z",
+    trace: [
+      {
+        step_idx: 0,
+        node_id: "cs",
+        messages_in: [
+          { role: "system", content: "You are a routing agent." },
+          { role: "user", content: `<context><node id="cs"><children><child id="cs.languages">Languages</child><child id="cs.algorithms">Algorithms</child><child id="cs.systems">Systems — Operating systems, networking, and concurrency</child></children></node></context>\n\nQuery: What's the difference between process and thread scheduling in an OS?` },
+        ],
+        raw_output: `<decision><reasoning>Process/thread scheduling is a core OS concept. "Systems" subtree is correct.</reasoning><action>descend</action><target>cs.systems</target><confidence>0.97</confidence></decision>`,
+        thinking: { text: "Process and thread scheduling is squarely in OS territory — 'Systems' subtree." },
+        decision: { kind: "descend", child_id: "cs.systems", reasoning: "OS scheduling is in Systems subtree.", confidence: 0.97 },
+        model: "gpt-4o-mini",
+        latency_ms: 310,
+        input_tokens: 400,
+        output_tokens: 46,
+      },
+      {
+        step_idx: 1,
+        node_id: "cs.systems",
+        messages_in: [
+          { role: "system", content: "You are a routing agent." },
+          { role: "user", content: `<context><node id="cs.systems"><children><child id="cs.systems.os">Operating Systems — Processes, scheduling, virtual memory</child></children></node></context>\n\nQuery: What's the difference between process and thread scheduling in an OS?` },
+        ],
+        raw_output: `<decision><reasoning>"Operating Systems" child explicitly covers processes and scheduling.</reasoning><action>descend</action><target>cs.systems.os</target><confidence>0.99</confidence></decision>`,
+        thinking: { text: "Child description says 'Processes, scheduling' — perfect match." },
+        decision: { kind: "descend", child_id: "cs.systems.os", reasoning: "Child description names processes and scheduling.", confidence: 0.99 },
+        model: "gpt-4o-mini",
+        latency_ms: 270,
+        input_tokens: 350,
+        output_tokens: 40,
+      },
+    ],
+    answer: {
+      messages_in: [
+        { role: "system", content: "Answer using the provided context." },
+        { role: "user", content: `<context><node id="cs.systems.os"><detail>Kernel manages CPU time (scheduler), memory (paging/segmentation), and I/O. Processes have isolated address spaces; threads share memory. System calls cross the user/kernel boundary.</detail></node></context>\n\nQuestion: What's the difference between process and thread scheduling in an OS?` },
+      ],
+      raw_output: "## Process vs Thread Scheduling\n\nBoth processes and threads are schedulable units of work...",
+      final_text: "## Process vs Thread Scheduling\n\nBoth processes and threads are schedulable units, but they differ in isolation and overhead:\n\n**Process:**\n- Has its own address space (virtual memory, file descriptors, signal handlers).\n- Context switching is expensive: the MMU must switch page tables.\n- Isolated — a crash in one process doesn't corrupt another.\n\n**Thread:**\n- Shares the parent process's address space.\n- Context switch is cheaper (same page tables, just register state swap).\n- Communication via shared memory (fast, but needs synchronisation).\n\n**Scheduling levels:**\n- *User-space threads* (M:1 or M:N models): scheduled by a runtime (Go goroutines, Python green threads). The kernel sees one or a few OS threads.\n- *Kernel threads* (1:1 model, used by Linux/Windows): each thread is a schedulable entity; the kernel's scheduler (CFS on Linux) assigns CPU time using priority queues.\n\n**Key insight:** The Linux scheduler treats threads and processes almost identically internally — both are `task_struct` entries. The difference is which resources they share (set via `clone()` flags).",
+      model: "gpt-4o-mini",
+      latency_ms: 1050,
+      input_tokens: 470,
+      output_tokens: 210,
+    },
+    final_answer: "## Process vs Thread Scheduling\n\nBoth processes and threads are schedulable units, but they differ in isolation and overhead:\n\n**Process:**\n- Has its own address space (virtual memory, file descriptors, signal handlers).\n- Context switching is expensive: the MMU must switch page tables.\n- Isolated — a crash in one process doesn't corrupt another.\n\n**Thread:**\n- Shares the parent process's address space.\n- Context switch is cheaper (same page tables, just register state swap).\n- Communication via shared memory (fast, but needs synchronisation).\n\n**Scheduling levels:**\n- *User-space threads* (M:1 or M:N models): scheduled by a runtime (Go goroutines, Python green threads). The kernel sees one or a few OS threads.\n- *Kernel threads* (1:1 model, used by Linux/Windows): each thread is a schedulable entity; the kernel's scheduler (CFS on Linux) assigns CPU time using priority queues.\n\n**Key insight:** The Linux scheduler treats threads and processes almost identically internally — both are `task_struct` entries. The difference is which resources they share (set via `clone()` flags).",
+  },
+};
+
+export const mockConversation2: Conversation = {
+  id: "conv-02",
+  tree_id: "example-cs",
+  created_at: "2026-05-24T09:00:00Z",
+  messages: [
+    {
+      id: "msg-b01",
+      role: "user",
+      content: "How does dynamic programming differ from recursion?",
+      status: "completed",
+      created_at: "2026-05-24T09:00:00Z",
+    },
+    {
+      id: "msg-b02",
+      role: "assistant",
+      content: mockRuns2["run-04"].final_answer,
+      run_id: "run-04",
+      status: "completed",
+      created_at: "2026-05-24T09:00:02Z",
+    },
+    {
+      id: "msg-b03",
+      role: "user",
+      content: "What's the difference between process and thread scheduling in an OS?",
+      status: "completed",
+      created_at: "2026-05-24T09:02:00Z",
+    },
+    {
+      id: "msg-b04",
+      role: "assistant",
+      content: mockRuns2["run-05"].final_answer,
+      run_id: "run-05",
+      status: "completed",
+      created_at: "2026-05-24T09:02:02Z",
+    },
+  ],
+};
+
+export const allMockRuns: Record<string, AgentRun> = {
+  ...mockRuns,
+  ...mockRuns2,
+};
+
+export const allMockConversations: Conversation[] = [mockConversation, mockConversation2];

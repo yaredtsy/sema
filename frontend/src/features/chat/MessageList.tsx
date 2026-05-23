@@ -87,7 +87,7 @@ function AssistantBubble({ msg }: { msg: ConvMessage }) {
 }
 
 export function MessageList() {
-  const messages = useChatStore((s) => s.messages);
+  const messages = useChatStore((s) => s.messages());
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {

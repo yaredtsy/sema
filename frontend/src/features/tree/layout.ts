@@ -15,7 +15,7 @@ export function layoutTree(root: Node): { nodes: FlowNode[]; edges: Edge[] } {
   const flowNodes: FlowNode[] = hier.descendants().map((d) => ({
     id: d.data.id,
     type: "treeNode",
-    position: { x: d.y, y: d.x },
+    position: { x: d.y ?? 0, y: d.x ?? 0 },
     data: { label: d.data.title, description: d.data.description, nodeData: d.data },
     style: { width: NODE_W },
   }));

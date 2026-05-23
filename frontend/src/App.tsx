@@ -7,8 +7,8 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<PlaygroundPage />} />
-        <Route path="/trees" element={<TreeListPage />} />
+        <Route path="/playground" element={<PlaygroundPage />} />
+        <Route path="/" element={<TreeListPage />} />
         <Route path="/trees/:treeId" element={<TreeWorkspacePage />} />
       </Routes>
     </BrowserRouter>

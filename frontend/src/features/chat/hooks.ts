@@ -5,6 +5,8 @@ let msgCounter = 100;
 
 export function useSendMessage() {
   const addMessage = useChatStore((s) => s.addMessage);
+  const activeConversationId = useChatStore((s) => s.activeConversationId);
+  const model = useChatStore((s) => s.model);
 
   return (text: string) => {
     const userMsg: ConvMessage = {
@@ -16,12 +18,10 @@ export function useSendMessage() {
     };
     addMessage(userMsg);
 
-    // Simulate a pending assistant reply (no backend in mock mode)
     const assistantMsg: ConvMessage = {
       id: `msg-${++msgCounter}`,
       role: "assistant",
-      content:
-        "*(Backend not connected — this is a mock UI. Select a message above in the Debug Panel to explore the agent's reasoning.)*",
+      content: `*(${model} · ${activeConversationId}) — Backend not connected. This is a mock UI. Use the Debug Panel to explore the agent's reasoning on the pre-loaded conversations.)*`,
       status: "completed",
       created_at: new Date().toISOString(),
     };

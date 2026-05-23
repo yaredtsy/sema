@@ -27,7 +27,7 @@ function AnswerSection({ finalAnswer, model, answer }: {
 }
 
 export function TracePanel() {
-  const messages = useChatStore((s) => s.messages);
+  const messages = useChatStore((s) => s.messages());
   const runs = useTraceStore((s) => s.runs);
   const debugTarget = useUiStore((s) => s.debugTarget);
   const debugMode = useUiStore((s) => s.debugMode);

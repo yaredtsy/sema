@@ -11,7 +11,7 @@ export interface TreeNodeData {
 }
 
 export function TreeNode({ data, selected }: NodeProps) {
-  const { label, description, highlight } = data as TreeNodeData;
+  const { label, description, highlight } = data as unknown as TreeNodeData;
 
   return (
     <div

@@ -1,20 +1,67 @@
 import { create } from "zustand";
-import { mockConversation } from "@/data/mockData";
-import type { ConvMessage } from "@/data/mockData";
+import { allMockConversations, allMockRuns } from "@/data/mockData";
+import type { Conversation, ConvMessage, AgentRun } from "@/data/mockData";
+
+export const MODELS = ["gpt-4.1-mini", "gpt-4o-mini"] as const;
+export type Model = (typeof MODELS)[number];
 
 interface ChatState {
-  conversationId: string;
-  messages: ConvMessage[];
+  conversations: Conversation[];
+  activeConversationId: string;
+  model: Model;
+
+  // derived helpers
+  activeConversation: () => Conversation;
+  messages: () => ConvMessage[];
+
+  // actions
+  switchConversation: (id: string) => void;
+  createConversation: () => void;
   addMessage: (message: ConvMessage) => void;
-  clear: () => void;
+  setModel: (model: Model) => void;
 }
 
-export const useChatStore = create<ChatState>(() => ({
-  conversationId: mockConversation.id,
-  messages: mockConversation.messages,
+const NEW_CONV_TEMPLATE = (): Conversation => ({
+  id: `conv-${Date.now()}`,
+  tree_id: "example-cs",
+  created_at: new Date().toISOString(),
+  messages: [],
+});
+
+export const useChatStore = create<ChatState>((set, get) => ({
+  conversations: allMockConversations,
+  activeConversationId: allMockConversations[0].id,
+  model: "gpt-4.1-mini",
+
+  activeConversation: () => {
+    const { conversations, activeConversationId } = get();
+    return conversations.find((c) => c.id === activeConversationId) ?? conversations[0];
+  },
+
+  messages: () => get().activeConversation().messages,
+
+  switchConversation: (id) => set({ activeConversationId: id }),
+
+  createConversation: () => {
+    const conv = NEW_CONV_TEMPLATE();
+    set((s) => ({
+      conversations: [conv, ...s.conversations],
+      activeConversationId: conv.id,
+    }));
+  },
+
   addMessage: (message) =>
-    useChatStore.setState((s) => ({ messages: [...s.messages, message] })),
-  clear: () => useChatStore.setState({ messages: [] }),
+    set((s) => ({
+      conversations: s.conversations.map((c) =>
+        c.id === s.activeConversationId
+          ? { ...c, messages: [...c.messages, message] }
+          : c,
+      ),
+    })),
+
+  setModel: (model) => set({ model }),
 }));
 
-export type { ConvMessage };
+// Keep traceStore seeded with all known runs
+export { allMockRuns };
+export type { ConvMessage, Conversation, AgentRun };
