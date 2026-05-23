@@ -1,24 +1,30 @@
-import { useMutation } from "@tanstack/react-query";
-import { postQuery } from "@/api/query";
 import { useChatStore } from "@/store/chatStore";
-import { useTraceStore } from "@/store/traceStore";
+import type { ConvMessage } from "@/data/mockData";
 
-export function useSendQuery() {
+let msgCounter = 100;
+
+export function useSendMessage() {
   const addMessage = useChatStore((s) => s.addMessage);
-  const setRunId = useTraceStore((s) => s.setRunId);
 
-  return useMutation({
-    mutationFn: postQuery,
-    onMutate: (vars) => {
-      addMessage({ id: crypto.randomUUID(), role: "user", content: vars.query });
-    },
-    onSuccess: (data, vars) => {
-      setRunId(data.run_id);
-      addMessage({
-        id: crypto.randomUUID(),
-        role: "assistant",
-        content: `(run ${data.run_id}) — agent not wired yet.`,
-      });
-    },
-  });
+  return (text: string) => {
+    const userMsg: ConvMessage = {
+      id: `msg-${++msgCounter}`,
+      role: "user",
+      content: text,
+      status: "completed",
+      created_at: new Date().toISOString(),
+    };
+    addMessage(userMsg);
+
+    // Simulate a pending assistant reply (no backend in mock mode)
+    const assistantMsg: ConvMessage = {
+      id: `msg-${++msgCounter}`,
+      role: "assistant",
+      content:
+        "*(Backend not connected — this is a mock UI. Select a message above in the Debug Panel to explore the agent's reasoning.)*",
+      status: "completed",
+      created_at: new Date().toISOString(),
+    };
+    setTimeout(() => addMessage(assistantMsg), 600);
+  };
 }

@@ -1,23 +1,18 @@
 import { create } from "zustand";
-
-export interface TraceStep {
-  step_idx: number;
-  node_id?: string;
-  payload?: Record<string, unknown>;
-}
+import { mockRuns } from "@/data/mockData";
+import type { AgentRun } from "@/data/mockData";
 
 interface TraceState {
-  runId: string | null;
-  steps: TraceStep[];
-  setRunId: (runId: string | null) => void;
-  addStep: (step: TraceStep) => void;
-  reset: () => void;
+  runs: Record<string, AgentRun>;
+  getRun: (runId: string) => AgentRun | undefined;
+  addRun: (run: AgentRun) => void;
 }
 
-export const useTraceStore = create<TraceState>((set) => ({
-  runId: null,
-  steps: [],
-  setRunId: (runId) => set({ runId }),
-  addStep: (step) => set((s) => ({ steps: [...s.steps, step] })),
-  reset: () => set({ runId: null, steps: [] }),
+export const useTraceStore = create<TraceState>(() => ({
+  runs: mockRuns,
+  getRun: (runId) => useTraceStore.getState().runs[runId],
+  addRun: (run) =>
+    useTraceStore.setState((s) => ({ runs: { ...s.runs, [run.run_id]: run } })),
 }));
+
+export type { AgentRun };

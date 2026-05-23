@@ -1,15 +1,25 @@
 import { create } from "zustand";
 
+export type DebugMode = "chat" | "tree";
+
 interface UiState {
   selectedNodeId: string | null;
-  tracePanelOpen: boolean;
+  debugTarget: string | null; // run_id currently being debugged
+  debugMode: DebugMode;
+  selectedStepIdx: number | null;
   setSelectedNodeId: (id: string | null) => void;
-  setTracePanelOpen: (open: boolean) => void;
+  setDebugTarget: (runId: string | null) => void;
+  setDebugMode: (mode: DebugMode) => void;
+  setSelectedStepIdx: (idx: number | null) => void;
 }
 
 export const useUiStore = create<UiState>((set) => ({
   selectedNodeId: null,
-  tracePanelOpen: true,
+  debugTarget: null,
+  debugMode: "chat",
+  selectedStepIdx: null,
   setSelectedNodeId: (selectedNodeId) => set({ selectedNodeId }),
-  setTracePanelOpen: (tracePanelOpen) => set({ tracePanelOpen }),
+  setDebugTarget: (debugTarget) => set({ debugTarget, selectedStepIdx: null }),
+  setDebugMode: (debugMode) => set({ debugMode }),
+  setSelectedStepIdx: (selectedStepIdx) => set({ selectedStepIdx }),
 }));

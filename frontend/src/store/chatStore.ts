@@ -1,19 +1,20 @@
 import { create } from "zustand";
-
-export interface ChatMessage {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-}
+import { mockConversation } from "@/data/mockData";
+import type { ConvMessage } from "@/data/mockData";
 
 interface ChatState {
-  messages: ChatMessage[];
-  addMessage: (message: ChatMessage) => void;
+  conversationId: string;
+  messages: ConvMessage[];
+  addMessage: (message: ConvMessage) => void;
   clear: () => void;
 }
 
-export const useChatStore = create<ChatState>((set) => ({
-  messages: [],
-  addMessage: (message) => set((s) => ({ messages: [...s.messages, message] })),
-  clear: () => set({ messages: [] }),
+export const useChatStore = create<ChatState>(() => ({
+  conversationId: mockConversation.id,
+  messages: mockConversation.messages,
+  addMessage: (message) =>
+    useChatStore.setState((s) => ({ messages: [...s.messages, message] })),
+  clear: () => useChatStore.setState({ messages: [] }),
 }));
+
+export type { ConvMessage };
