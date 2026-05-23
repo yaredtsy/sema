@@ -55,10 +55,26 @@ Defer SSE until Phase 4. Phase 3 polls `GET /runs/{run_id}` instead.
 
 Polling is a temporary stop-gap so we ship the UI without SSE plumbing. Replaced in Phase 4.
 
-### 3.9 Trace panel (static version)
-- Renders steps from `traceStore.steps` — but populated only at end of run (since we're polling).
-- Step cards with reasoning + foldouts for prompt/output.
-- Live trace animation deferred to Phase 4.
+### 3.9 Conversation + chat skeleton (+ Alembic adoption)
+- Add Conversation/Message/Run **SQLAlchemy tables** under `backend/sace/db/models.py` per the planned shape in [02-data-model/04-conversation-schema.md](../02-data-model/04-conversation-schema.md).
+- **Adopt Alembic** at this PR boundary: initialize Alembic, baseline migration captures `trees`+`nodes`, second migration adds the new tables. Stop calling `init_db()` from lifespan; replace with `alembic upgrade head`. See [02-data-model/05-database-and-orm.md](../02-data-model/05-database-and-orm.md).
+- `ConversationManager` + `RunRegistry` per [03-agent/06-conversation-and-runs.md](../03-agent/06-conversation-and-runs.md), backed by the new tables (sessions injected the same way `TreeStore` is).
+- Endpoints: `POST /conversations`, `POST /conversations/{cid}/messages`, `GET /conversations/{cid}`, `GET /runs/{id}`.
+- Cursor-style chat panel (without inline thinking/steps streaming — those land in Phase 4) — multi-turn already works; the assistant bubble renders the final markdown when the run completes.
+
+### 3.10 Debug panel — static version
+- Message selector dropdown (target = a `run_id`).
+- Step list populated from `GET /runs/{run_id}` after the run completes.
+- Step cards with foldouts (messages_in, raw output, decision, metrics).
+- Mode toggle exists but only one mode (`chat-style` is a list view; `tree-overlay` flips a class).
+- Replay scrubber operational for completed runs.
+
+### 3.11 Tree-overlay — minimal
+- Highlight visited nodes from `traceStore.runs[debugTarget]`.
+- Click a visited node → inspector card with that step's data.
+- No animation yet (Phase 4 adds the live edge animations).
+
+Live trace animation, SSE plumbing, and inline streaming of thinking/steps inside the chat bubble are deferred to Phase 4.
 
 ### 3.10 Tests
 - A smoke Playwright (or Vitest + jsdom for components) that:
@@ -73,9 +89,10 @@ Polling is a temporary stop-gap so we ship the UI without SSE plumbing. Replaced
 
 - SSE (Phase 4)
 - Live tree animation (Phase 4)
+- Inline streaming of thinking / step decisions inside the assistant message bubble (Phase 4 — relies on SSE)
 - Multi-tree selection UX (one tree shown by default; selector is a stretch goal)
 - Settings drawer
-- Replay mode
+- Concurrent-runs UX polish (works in v1; "live" badge on selector is Phase 4)
 
 ## Risks
 

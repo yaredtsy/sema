@@ -16,6 +16,7 @@ The chosen tools, what they buy us, and the alternatives we considered.
 | `sse-starlette` | latest | SSE helper | Cleaner than rolling our own `EventSourceResponse` |
 | `networkx` | 3.6+ | Tree utilities | Already in deps; useful for traversal helpers & viz export |
 | `httpx` | latest | Outbound HTTP | Used by OpenAI SDK under the hood |
+| **`SQLAlchemy`** | **2.0+** | **ORM + DB access** | **`DeclarativeBase` + `Mapped[T]`; sync engine; thin façade in `TreeStore`** |
 | `pytest` + `pytest-asyncio` | latest | Tests | Standard |
 
 ## Models — small only, on purpose
@@ -63,14 +64,27 @@ We consider `D3` for the tree but **default to React Flow** — D3 forces impera
 | `pre-commit` | Local hook runner (optional) |
 | `make` (or `just`) | One-liner for `dev`, `test`, `seed` |
 
+## Database
+
+| Stage | Engine | URL |
+|---|---|---|
+| Dev (default) | **SQLite** | `sqlite:///./data/sace.db` (auto-created under repo root) |
+| Anything beyond local | **Postgres** | `postgresql+psycopg://...` via `SACE_DATABASE_URL` |
+| Hosted option | **Supabase Postgres** | The `supabase/config.toml` at the repo root is the on-ramp |
+
+We do **not** use Supabase-specific features (auth, RLS, realtime) — only Postgres-as-a-service when we want it. Swap by changing one env var.
+
+Migrations: **not yet using Alembic**. `Base.metadata.create_all()` runs in the FastAPI `lifespan` and is enough for the current `trees` / `nodes` schema. The moment the first new table lands (Conversation/Message/Run), we adopt Alembic. See [02-data-model/05-database-and-orm.md](../02-data-model/05-database-and-orm.md).
+
 ## What we are *not* using (and why)
 
-- **No database.** Trees live in `data/trees/*.json`. Persistence is `git`.
+- **No vector DB.** The whole point is to avoid one.
 - **No Docker for dev.** `uv run` + `npm run dev` is enough.
 - **No Redux / RTK.** Zustand handles the small amount of cross-component state.
 - **No WebSockets.** SSE is one-way and sufficient; see [05-api/02-sse-streaming.md](../05-api/02-sse-streaming.md).
-- **No vector DB.** The whole point is to avoid one.
 - **No Next.js.** SSR adds nothing; Vite SPA is simpler.
+- **No async SQLAlchemy.** Sync engine + FastAPI threadpool is enough; revisit only if DB latency becomes hot-path.
+- **No Alembic yet.** `create_all` until the schema starts evolving.
 - **No non-mini models.** See the "Models" section above — this is a hard rule.
 
 ## Version policy

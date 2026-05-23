@@ -6,32 +6,36 @@ One repo, two apps, shared docs and data. Flat enough to navigate by `ls`, deep 
 
 ```
 sace/
-├── backend/                  # Python: FastAPI + LangGraph
+├── backend/                  # Python: FastAPI + LangGraph + SQLAlchemy
 ├── frontend/                 # React + Vite + TypeScript
-├── data/                     # Source-of-truth trees (JSON)
-│   ├── trees/
+├── data/                     # Seed trees (JSON) + the SQLite file (gitignored)
+│   ├── sace.db               # SQLite database — runtime truth (gitignored)
+│   ├── trees/                # Source-of-truth JSON (committed, used to seed empty DB)
 │   │   ├── example-cs.json
 │   │   └── example-cooking.json
 │   └── README.md
+├── supabase/                 # On-ramp for Postgres-on-Supabase (config only; not active by default)
+│   └── config.toml
 ├── docs/                     # You are here
 ├── scripts/                  # One-off helpers (seed, export, convert)
 │   ├── seed_tree.py
+│   ├── gen_types.py
 │   └── export_trace.py
 ├── .python-version           # uv pin
 ├── pyproject.toml            # backend (the Python project)
 ├── uv.lock
-├── package.json              # workspace root (optional, see below)
 ├── Makefile                  # dev shortcuts
 ├── README.md                 # project landing
-└── .gitignore
+└── .gitignore                # ignores .venv, node_modules, data/*.db, .env*
 ```
 
 ## Why this shape
 
 - **No nested `apps/` or `packages/`.** With only two apps, the extra layer is noise.
-- **Backend uses the root `pyproject.toml`.** The project is already structured that way (`name = "sace"`). We keep that.
+- **Backend uses the root `pyproject.toml`.** The project is already structured that way (`name = "sace"`, `packages = ["backend/sace"]`).
 - **Frontend is a standalone npm project.** No workspace needed; we can add `pnpm-workspace.yaml` later if we extract a shared types package.
-- **`data/` is at the root.** Trees are an input to both the backend (at runtime) and the docs (as examples), so they don't live inside either app.
+- **`data/` is at the root.** Trees (JSON) are an input to both the backend (at boot time) and the docs (as examples). The SQLite file also lives here so a `data/`-targeted git-ignore covers both kinds of state.
+- **`supabase/` is at the root.** It is the on-ramp for switching the database to hosted Postgres; not used by default. See [02-data-model/05-database-and-orm.md](../02-data-model/05-database-and-orm.md).
 - **`scripts/` is at the root** because some scripts touch both apps (e.g. generating TypeScript types from the Pydantic schema).
 
 ## Backend tree

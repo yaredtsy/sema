@@ -1,6 +1,6 @@
 # Tree visualization
 
-The middle panel. Renders the dendrogram and animates the agent's walk on top of it.
+The base rendering of the dendrogram. This doc covers layout, node rendering, and interaction — but **not** the agent-run overlay. The overlay (highlighting visited nodes, drawing the route, showing per-node step detail when a debug target is set) is in [05-tree-overlay-debug.md](./05-tree-overlay-debug.md).
 
 ## Library
 

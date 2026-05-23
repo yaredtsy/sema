@@ -1,8 +1,12 @@
-# Phase 4 — Debug & live trace
+# Phase 4 — Live debug & dual-view fidelity
 
-**Goal:** Replace polling with SSE. The UI shows the agent's walk *as it happens* — cursor moves, edges animate, step cards stream in. Replay mode works. This is the playground at its full intended fidelity.
+**Goal:** Replace polling with SSE. The agent's walk streams live across **both** debug views — inline in the chat bubble (Cursor-style: thinking, steps, answer) and on the tree (animated edges, current cursor, step badges). The message selector switches debug targets without interrupting other live runs. Replay scrubbing works for any past message. This is the playground at full intended fidelity — the GPS-history experience.
 
-**Done when:** you submit a question and watch the agent walk the tree in real time, with each step card appearing as the LLM responds, and you can scrub backward through the trace.
+**Done when:** in the browser:
+1. You ask a question; the assistant bubble fills in thinking → steps → answer as the LLM works, and the tree animates the route at the same time.
+2. You send a second question while the first is still streaming; both bubbles stream concurrently.
+3. You click an old assistant message and the tree overlay + debug panel snap to that message's trip, leaving the live ones running.
+4. You scrub backwards through a completed trip and the tree-overlay reflects partial state at each step.
 
 ## Tasks
 
@@ -36,31 +40,42 @@ If streaming complicates the parsing for the *router* step, we leave router call
 - Auto-reconnect with `Last-Event-ID`.
 - Returns an `unsubscribe` function.
 
-### 4.6 Live wiring
-- `useLiveTrace(run_id)` hook in `App.tsx`.
-- Remove the polling from Phase 3.
-- `traceStore` reducers for each event name.
-- Edge animation in React Flow on `visit`.
-- "Considered" siblings highlight on `step`, fade after 1.5s.
+### 4.6 Live wiring — per run
+- `useLiveRun(run_id)` hook subscribes to SSE and applies events to `traceStore.runs[run_id]`.
+- App keeps an open subscription per in-flight `run_id` (or one multiplexed conn to `/conversations/{cid}/stream`).
+- `traceStore` reducers for each event name (`start`, `step_start`, `thinking_delta`, `tool_call`, `step`, `visit`, `answer_start`, `answer_token`, `final`, `error`, `done`).
+- Tree-overlay: edge animation on `visit`; step badge upsert on `step`; pulse on current cursor.
+- Concurrent live runs supported (multiple subscriptions, no shared mutable state).
 
-### 4.7 Live status row in chat
-- `LiveStatusRow.tsx` reading the latest step + cursor from `traceStore`.
-- Switches to the final markdown answer when `final` arrives.
+### 4.7 Inline streaming in the chat bubble
+- `AssistantMessage` renders `ThinkingFoldout`, `StepsFoldout`, `AnswerFoldout` driven by `traceStore.runs[run_id]`.
+- Thinking and step decisions arrive as events fire; answer markdown streams with `answer_token` chunks throttled at ~20fps.
+- Meta bar finalizes on `done`.
 
-### 4.8 Replay mode
-- `traceStore.replayIndex` (number | null).
-- Selectors `cursorIdAt(i)`, `visitedIdsAt(i)`.
-- Components read from selectors when `replayIndex != null`.
-- Trace panel scrubber + Live/Replay toggle.
+### 4.8 Replay — derived from saved state
+- `traceStore.replayIndex` (per-target).
+- Selectors `cursorIdAt(i)`, `visitedIdsAt(i)`, `stepAt(i)`.
+- Debug panel scrubber for completed runs.
+- Live/replay transition is seamless: a completed run's panel just gains a scrubber, no mode flip.
 
-### 4.9 Cancellation
+### 4.9 Message selector + debug-target pinning
+- Dropdown in the debug panel + top bar listing assistant messages.
+- `uiStore.debugTarget` + `uiStore.debugTargetIsPinned`.
+- Behavior: live runs auto-follow until pinned; pinned target survives new runs starting.
+- Keyboard shortcuts (`⌘[`, `⌘]`, `⌘0`).
+- Clicking an assistant message bubble sets the target.
+
+### 4.10 Cancellation
 - `POST /runs/{id}/cancel` endpoint.
 - Cancel button on the in-flight assistant message in chat.
 - Graph nodes check the cancellation event between LLM calls.
+- Cancelled run's partial trace remains debuggable.
 
-### 4.10 Tests
-- `tests/integration/test_sse.py` — start a run, subscribe, assert event sequence shape.
-- Frontend: a Vitest test that feeds a mocked `EventSource` and asserts the trace store state.
+### 4.11 Tests
+- `tests/integration/test_sse.py` — start a run, subscribe, assert event sequence shape (including `step_start` / `thinking_delta` / `step` ordering per step).
+- `tests/integration/test_concurrent_runs.py` — two runs in flight, two SSE streams, no cross-talk.
+- Frontend: a Vitest test that feeds a mocked `EventSource` and asserts the per-run `traceStore` state.
+- Frontend: a test that toggles `debugTarget` between two completed runs and asserts the overlay selectors switch.
 
 ## Out of scope for Phase 4
 

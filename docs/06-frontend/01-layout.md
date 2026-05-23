@@ -1,87 +1,109 @@
 # UI layout
 
-The frontend is a single screen with three regions. No routing in v1 (no second page exists).
+A single screen with three regions, designed around the GPS-history metaphor: the **map** (tree), the **trip details** (debug panel), and the **conversation** (chat). No routing in v1.
 
-## Wireframe
+## Wireframe (desktop, ≥ 1280px)
 
 ```
-┌────────────────────────────────────────────────────────────────────────────┐
-│  ▼ Tree: cs ┃ Run: 01HQX…  Model: gpt-4.1-mini   Status: ●streaming        │  (top bar)
-├──────────────────────────────────┬──────────────────────┬──────────────────┤
-│                                  │                      │                  │
-│         Tree visualization       │      Trace panel     │   Chat panel     │
-│         (React Flow)             │     (collapsible)    │                  │
-│                                  │                      │                  │
-│  ● cs ─┬─ ● langs ◀ (current)    │  Step 0  cs          │  [user] question │
-│        │   ├─ ○ python  (next)   │  → descend           │  [ai]   ...      │
-│        │   └─ ○ rust             │     "matches python" │                  │
-│        └─ ○ frameworks            │  Step 1  cs.langs    │                  │
-│                                  │  → descend python    │                  │
-│                                  │  Step 2  …python      │                  │
-│                                  │                      │                  │
-│                                  │                      │  > type here _   │
-└──────────────────────────────────┴──────────────────────┴──────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│  Tree: cs ▼  │  Conv: 01HQT…  │  Debugging: msg #3 ▼  Mode: tree ⇄ chat  ●live │  (top bar)
+├──────────────────────────────────┬────────────────────────┬─────────────────────┤
+│                                  │                        │                     │
+│       Tree view  (the map)       │   Debug panel          │   Chat panel        │
+│                                  │  (trip details)         │  (conversation)    │
+│                                  │                        │                     │
+│   ● cs ─┬─ ● langs ✓             │  Target: msg #3        │  [user] q1          │
+│         │   ├─ ● python ✓ ◀cur   │  Mode: tree-overlay    │  [ai]  ▶ thinking   │
+│         │   │   └─ ● async ✓     │                        │        ● step 0     │
+│         │   └─ ○ rust            │  Step 0  cs            │        ● step 1     │
+│         └─ ○ frame                │  → descend cs.langs   │        ● answer ✓   │
+│                                  │  ──────────────────    │  [user] q2          │
+│   (overlay reflects the selected │  Step 1  cs.langs      │  [ai]  ▶ thinking   │
+│    message; click visited nodes  │  → descend python      │        ● step 0     │
+│    to inspect step detail)       │  ──────────────────    │        ● answer ✓ ◀│
+│                                  │  Step 2  …python       │  [user] q3          │
+│                                  │  → stop                │  [ai]  live...      │
+│                                  │  ──────────────────    │                     │
+│                                  │  answer: leaf          │  > _                │
+└──────────────────────────────────┴────────────────────────┴─────────────────────┘
 ```
+
+The arrow `◀` on a chat message marks the **current debug target**. Click any past assistant message to change the target — both the tree overlay and the debug panel snap to that run.
 
 ## Region sizes
 
-Defaults (desktop ≥ 1280px wide):
-- **Tree**: flex-grow 1, min 480px
-- **Trace**: 360px, collapsible to 0 (hidden)
-- **Chat**: 380px, fixed but resizable down to 320px / up to 560px
+- **Tree** — `flex-grow 1`, min `480px`.
+- **Debug panel** — `360px`, collapsible to `0`.
+- **Chat** — `380px`, resizable `320–560px`.
 
-Below 1280px we collapse the trace panel by default; below 1024px we stack chat under the tree.
-
-Resizing is handled by `react-resizable-panels` or a custom drag handle. The widths persist to `localStorage` via `uiStore`.
+Below `1280px` the debug panel collapses by default. Below `1024px` chat stacks under the tree. Widths persist to `localStorage` via `uiStore`.
 
 ## Top bar
 
-A single row above all panels showing:
-- Current tree (dropdown if multiple trees loaded)
-- Current run id (clickable → copies to clipboard)
-- Current model
-- Connection status badge (`idle`, `streaming`, `done`, `error`)
-- Settings cog → opens a side sheet with model / params
+A single row showing:
+- **Current tree** (dropdown if multiple loaded)
+- **Conversation id** (clickable → copy)
+- **Debug target** — dropdown listing assistant messages in the conversation, prefilled with the currently selected one. "Live" if a run is streaming and is also the target.
+- **Mode toggle** — `tree-overlay` ⇄ `chat-style` (controls how the debug target is visualized; both work simultaneously, this just controls which is *emphasized*)
+- **Status badge** — `idle` / `streaming` / `replay` / `error`
+- **Settings cog** — opens a side sheet (model, params)
 
-The top bar reads from `traceStore` and `uiStore`. It has no business logic.
-
-## Region responsibilities, recap
+## Region responsibilities
 
 | Region | Reads | Writes |
 |---|---|---|
-| Tree | `useTree(tree_id)` (server data), `traceStore.cursor_id`, `traceStore.visited_ids` | `uiStore.selectedNode` (click) |
-| Trace | `traceStore.steps`, `traceStore.status` | `uiStore.selectedStep` |
-| Chat | `chatStore.messages`, `useSendQuery()` | `chatStore`, kicks off a new run |
+| Tree | `useTree(tree_id)`, `traceStore.runs[debugTarget]`, `uiStore.selectedNode` | `uiStore.selectedNode` (click) |
+| Debug panel | `traceStore.runs[debugTarget]`, `uiStore.debugMode`, `uiStore.selectedStep` | `uiStore.selectedStep`, `uiStore.debugTarget` |
+| Chat | `chatStore.messages`, `traceStore.runs[*]`, `useSendQuery()` | `chatStore`, `uiStore.debugTarget` (on message click), kicks new runs |
 
-Cross-region: clicking a step in the Trace highlights its node in the Tree (`uiStore.selectedNode`). Hovering a tree node shows its description in a tooltip.
+**Single source of truth: `uiStore.debugTarget`.** A run id string (or `"live"`). Every component that visualizes "the currently debugged trip" reads this and re-derives.
 
-## Empty / loading / error states
+## Cross-region wiring
 
-| State | Tree | Trace | Chat |
+- Click an **assistant message** in chat → `uiStore.setDebugTarget(message.run_id)` → tree overlay + debug panel switch.
+- Click a **step card** in the debug panel → `uiStore.setSelectedStep(idx)` → tree centers on that step's node + highlights it.
+- Click a **visited node** in the tree → if a debug target is set, opens that node's step detail in the debug panel.
+
+## State machines per region
+
+| State | Tree | Debug panel | Chat |
 |---|---|---|---|
-| App boot | skeleton tree (3 fake nodes) | "no run yet" | input ready, send disabled |
-| Query sent, no events yet | tree faded, cursor unset | "starting..." | message added optimistically |
-| First step arrives | cursor highlighted | step card appears | normal |
-| Run errors | tree returns to idle | red error card | error appears as a system message |
-| Run done | last-cursor highlighted | all step cards | final answer rendered |
+| Boot | skeleton (3 fake nodes) | "no message selected" | input ready, send enabled |
+| Conversation empty, idle | tree loaded, no overlay | "send a message to start" | input ready |
+| Query sent | tree dims; target = new assistant message | step cards begin appearing | new assistant bubble appears as "thinking" |
+| Step arrives | corresponding node highlights | step card upserts (or fills in from "in-progress") | inline step item appears under the assistant bubble |
+| Final arrives | last cursor highlighted | "answer" marker; mode toggle now valid | assistant content = the final markdown |
+| Past message clicked | overlay snaps to that run's visited nodes | step cards replaced with that run's | clicked message gets the `◀` indicator |
+| Concurrent runs | overlay reflects the *target*, not the most recent | reflects target | multiple assistant bubbles can be live |
+| Run errors | tree marks the last visited node with an error badge | red step card at the failure point | error indicator on that assistant bubble |
 
-All four state machines feed off the same SSE stream — see [04-live-trace.md](./04-live-trace.md).
+## Empty state (first paint, no messages yet)
 
-## Why three panels, not tabs
-
-Tabs hide the second piece of context. The whole pitch of this project is *seeing the agent reason while it reasons*. If the tree is behind a tab, the user has to choose between watching the agent and reading its answer — exactly the wrong tradeoff.
+The tree shows fully, with no overlay. The chat shows a hint: *"Ask a question. The agent will traverse the tree — pick any past message to debug its trip."* Two or three suggested prompts.
 
 ## Color / theme
 
-Dark mode default (consistent with what we'll be staring at for hours). Tailwind's `slate-900` background, `slate-100` text. Accent color for current node, faded color for visited, normal for unvisited. Specific palette in `tailwind.config.js`.
+Dark mode default. Tailwind `slate-900` background, `slate-100` text. Specific palette in `tailwind.config.js`. Color codes used:
 
-Accessibility: no information conveyed by color alone. The current node is also marked with a ring; visited nodes also get a small dot indicator.
+| Meaning | Color |
+|---|---|
+| Visited (in debug target) | medium slate + faint border |
+| Current cursor (live runs) | emerald ring |
+| Selected step in debug | sky ring |
+| Concurrent live run, not the target | thin violet underline |
+| Error | rose |
 
-## What is intentionally not on screen (yet)
+Accessibility: no information conveyed by color alone. The current node also carries a ring; visited nodes also get a dot indicator.
 
-- A node editor (we edit JSON files for now).
-- A run history list (you can fetch by `run_id` via the URL bar; we add a sidebar when it matters).
-- Multi-trace comparison view (planned for after the baseline works).
-- A settings drawer beyond model + max_depth.
+## Why three regions, not tabs
 
-Each of these has a known slot in the layout if/when we add it.
+Tabs hide context. The whole pitch is *seeing the agent's trip on the map while reading the turn-by-turn list while continuing the conversation*. None of those should be hidden behind a click.
+
+## Things intentionally not in v1
+
+- Two trees side-by-side
+- Diff mode (run-vs-run on two messages)
+- A node editor surface
+- Multi-conversation tabs
+
+Each has a slot in this layout if/when needed.

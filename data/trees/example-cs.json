@@ -1,0 +1,31 @@
+{
+  "id": "example-cs",
+  "name": "Computer Science",
+  "description": "A small example tree for development",
+  "root": {
+    "id": "cs",
+    "title": "Computer Science",
+    "description": "Root of the CS example tree",
+    "detail": "",
+    "children": [
+      {
+        "id": "cs.languages",
+        "title": "Languages",
+        "description": "Programming languages and paradigms",
+        "detail": "",
+        "children": [
+          {
+            "id": "cs.languages.python",
+            "title": "Python",
+            "description": "General-purpose language with rich ecosystem",
+            "detail": "## Python\n\nUsed for scripting, data science, and backends.",
+            "children": [],
+            "tags": ["lang"]
+          }
+        ],
+        "tags": []
+      }
+    ],
+    "tags": []
+  }
+}

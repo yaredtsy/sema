@@ -2,6 +2,12 @@
 
 The `Node` is the *only* domain type. Everything else (events, state, traces) is bookkeeping on top.
 
+There are two layers for `Node`:
+- **Pydantic `Node` / `Tree`** in `backend/sace/schema/node.py` — the API surface; what callers, prompts, and tests see.
+- **SQLAlchemy `NodeRow` / `TreeRow`** in `backend/sace/db/models.py` — the on-disk shape, flat with `parent_id` and `sort_order`. See [05-database-and-orm.md](./05-database-and-orm.md).
+
+`TreeStore` is the only code that bridges them. This page describes the Pydantic shape.
+
 ## Goals
 
 1. **Three text fields with three jobs.** `title` is for routing labels, `description` is for routing decisions, `detail` is for answering.
@@ -121,7 +127,25 @@ Dotted `id`s are a hint, not enforcement. `cs.languages.python` is not required 
 ## Extension points (later, not now)
 
 - `links: list[str]` — outbound references to other nodes (when we want a DAG, not just a tree).
-- `embedding: list[float]` — optional cached embedding for hybrid retrieval ablation.
-- `version: int` — for editable trees.
+- `embedding: list[float]` — optional cached embedding for hybrid retrieval ablation. Postgres + `pgvector` is the obvious target.
+- `version: int` — for editable trees (we already have `created_at`/`updated_at` on the `trees` row).
 
-All three are deliberately absent in v1.
+All three are deliberately absent in v1. The DB-side column types are uncontroversial when we add them; the harder question is what the prompt does with the new field. Defer until we know.
+
+## Persistence — at a glance
+
+The Pydantic `Node` is recursive; the DB shape is flat:
+
+```
+Pydantic Node                      SQLAlchemy NodeRow
+  id                                 (tree_id, id) PK
+  title                              title
+  description                        description
+  detail                             detail
+  children: [Node]                   ← reconstructed from parent_id + sort_order on read
+  tags: [str]                        tags_json  (JSON-encoded TEXT)
+                                     parent_id  (None for root)
+                                     sort_order (sibling position)
+```
+
+Flatten / reconstruct lives in `TreeStore`. See [02-tree-operations.md](./02-tree-operations.md).

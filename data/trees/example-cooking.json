@@ -1,0 +1,31 @@
+{
+  "id": "example-cooking",
+  "name": "Cooking",
+  "description": "A small example tree for development",
+  "root": {
+    "id": "cooking",
+    "title": "Cooking",
+    "description": "Root of the cooking example tree",
+    "detail": "",
+    "children": [
+      {
+        "id": "cooking.techniques",
+        "title": "Techniques",
+        "description": "Core cooking methods",
+        "detail": "",
+        "children": [
+          {
+            "id": "cooking.techniques.saute",
+            "title": "Sauté",
+            "description": "Quick cooking in a shallow pan with fat",
+            "detail": "## Sauté\n\nUse medium-high heat and keep ingredients moving.",
+            "children": [],
+            "tags": []
+          }
+        ],
+        "tags": []
+      }
+    ],
+    "tags": []
+  }
+}

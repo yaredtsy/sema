@@ -7,19 +7,26 @@ backend/
 ├── sace/
 │   ├── __init__.py
 │   │
-│   ├── config.py                  # env vars (OPENAI_API_KEY, MODEL_NAME, LOG_LEVEL), Settings via pydantic-settings
+│   ├── config.py                  # env vars (OPENAI_API_KEY, SACE_MODEL, SACE_DATABASE_URL, ...) via pydantic-settings
 │   │
-│   ├── schema/                    # Pydantic models — the type backbone of the project
+│   ├── schema/                    # Pydantic models — the API/agent type backbone
 │   │   ├── __init__.py
 │   │   ├── node.py                # Node, Tree
 │   │   ├── events.py              # StepEvent, FinalEvent, ErrorEvent, EventEnvelope
-│   │   ├── api.py                 # QueryRequest, QueryResponse, TreeSummary
+│   │   ├── api.py                 # QueryRequest, QueryResponse, TreeSummary, NodeDetailResponse
 │   │   └── state.py               # AgentState (LangGraph TypedDict)
 │   │
-│   ├── store/                     # Persistence (JSON files for now)
+│   ├── db/                        # SQLAlchemy 2.0 — the persistence layer
+│   │   ├── __init__.py            # re-exports get_session, init_db
+│   │   ├── base.py                # DeclarativeBase
+│   │   ├── models.py              # TreeRow, NodeRow  (+ later: ConversationRow, MessageRow, RunRow)
+│   │   ├── session.py             # engine + sessionmaker + get_session generator
+│   │   └── seed.py                # seed_from_json_directory()
+│   │
+│   ├── store/                     # Thin façade over the ORM; speaks Pydantic to callers
 │   │   ├── __init__.py
-│   │   ├── tree_store.py          # TreeStore: load, get, find_by_id, breadcrumbs
-│   │   └── json_loader.py         # read/validate JSON tree files
+│   │   ├── tree_store.py          # TreeStore(session): list/get/create/update/delete + find_node + breadcrumbs
+│   │   └── json_loader.py         # one-shot Tree.model_validate(json) helper
 │   │
 │   ├── prompts/                   # All prompt logic — no LLM calls here, just strings
 │   │   ├── __init__.py
@@ -87,11 +94,20 @@ Allowed imports (top → can import from anything below it):
 
 ```
 api  →  agent  →  prompts , llm , events , store , schema
+                                              │
+                                              ▼
+                                              db
 ```
 
-Stricter: `schema` imports nothing internal. `prompts` imports only `schema`. `llm` imports only `schema`. `store` imports only `schema`. The graph (`agent/`) is the only place that wires them together.
+Stricter:
+- `schema` imports nothing internal.
+- `db` imports only `schema` (and SQLAlchemy).
+- `prompts` imports only `schema`.
+- `llm` imports only `schema`.
+- `store` imports `schema` + `db` — it is the **only** layer that touches SQLAlchemy.
+- `agent/` is where prompts/llm/store/events/schema get wired together.
 
-This means: you can read any file in `prompts/`, `schema/`, or `store/` in isolation. They have no surprise dependencies.
+This means: you can read any file in `prompts/`, `schema/`, or `db/` in isolation. They have no surprise dependencies. SQLAlchemy never leaks past `store/`.
 
 ## Entry points
 
@@ -103,16 +119,18 @@ This means: you can read any file in `prompts/`, `schema/`, or `store/` in isola
 
 ## Configuration
 
-`sace/config.py` exports a single `Settings` from `pydantic-settings`. Required env vars:
+`sace/config.py` exports a single `Settings` from `pydantic-settings`. Env vars:
 
-| Var | Example | Notes |
+| Var | Default | Notes |
 |---|---|---|
-| `OPENAI_API_KEY` | `sk-...` | Required |
-| `SACE_MODEL` | `gpt-4.1-mini` | Default; **must be a mini-tier model** |
+| `OPENAI_API_KEY` | — | Required for the agent path |
+| `SACE_MODEL` | `gpt-4.1-mini` | **Must be in `MINI_MODEL_ALLOWLIST`** — validated by `Settings.validate_model()` |
 | `SACE_MAX_DEPTH` | `5` | Traversal safety bound |
 | `SACE_LOG_LEVEL` | `INFO` | |
+| `SACE_DATA_TREES_DIR` | `data/trees` | Where the cold-boot seeder reads JSON trees |
+| `SACE_DATABASE_URL` | `sqlite:///./data/sace.db` | SQLAlchemy URL; swap to Postgres/Supabase by changing this |
 
-`make_chat_model()` validates `SACE_MODEL` against an allowlist and raises if it isn't a mini model.
+`make_chat_model()` validates `SACE_MODEL` against `MINI_MODEL_ALLOWLIST` and raises if it isn't a mini model. The DB URL is parsed by `db/session.py` — relative SQLite paths are resolved against the repo root and parent dirs are auto-created.
 
 ## What goes where — quick rules
 
@@ -121,7 +139,10 @@ This means: you can read any file in `prompts/`, `schema/`, or `store/` in isola
 | "Where does this prompt string live?" | `prompts/` |
 | "Where do we decide to descend vs. stop?" | `agent/router_node.py` and `agent/policies.py` |
 | "Where is the loop?" | `agent/graph.py` (LangGraph edges) |
-| "Where do we read a tree from disk?" | `store/json_loader.py` |
+| "Where do we read a tree from disk (JSON)?" | `store/json_loader.py` (one-shot) or `db/seed.py` (boot-time) |
+| "Where do we read/write a tree at runtime?" | `store/tree_store.py` (via the DB) |
+| "Where is the SQLAlchemy schema?" | `db/models.py` |
+| "Where does the DB get created on boot?" | `db/session.py::init_db()`, called from `api/app.py` lifespan |
 | "Where do we add a new event type?" | `schema/events.py` *and* `events/emit.py` |
 | "Where is the SSE handler?" | `api/routes/events.py` |
 | "Where does cancellation happen?" | `api/runs.py` |

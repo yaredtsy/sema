@@ -1,16 +1,20 @@
 # REST endpoints
 
-All endpoints are prefixed `/api/v1`. Versioning is in the URL; we will bump to `/api/v2` if a breaking change ships.
+All endpoints are prefixed `/api/v1`. Versioning is in the URL.
+
+The API is organized around three resources: **trees** (the maps), **conversations** (lists of trips), and **runs** (individual trips). The SSE stream is a fourth surface — see [02-sse-streaming.md](./02-sse-streaming.md).
 
 ## Conventions
 
 - Request bodies and responses are JSON.
-- Errors are `application/json` of shape `{"error": {"code": "...", "message": "..."}}` with appropriate HTTP status.
-- IDs are short ULIDs unless they are tree/node ids (which are user-defined strings).
-- Times are ISO-8601 strings, UTC.
-- Pagination is not implemented in v1; collections are small.
+- Errors are `application/json` of shape `{"error": {"code": "...", "message": "..."}}`.
+- IDs are ULIDs except tree/node ids (user-defined strings).
+- Times are ISO-8601 UTC.
+- No pagination in v1.
 
-## Endpoints
+---
+
+## Trees
 
 ### `GET /api/v1/health`
 
@@ -18,9 +22,8 @@ Liveness. Returns `{"status": "ok"}`.
 
 ### `GET /api/v1/trees`
 
-Lists all loaded trees with summary info.
+Lists loaded trees.
 
-**Response 200**
 ```json
 {
   "trees": [
@@ -38,115 +41,254 @@ Lists all loaded trees with summary info.
 
 ### `GET /api/v1/trees/{tree_id}`
 
-The full `Tree` object — root with all children, recursively.
+The full `Tree` object (root + all children).
 
-**Response 200**: a serialized `Tree` (see [02-data-model/01-node-schema.md](../02-data-model/01-node-schema.md)).
-**Response 404**: `tree_not_found`.
+**Errors**
+- `404 not_found` — no such tree.
 
-Used by the frontend on initial load to render the tree viz.
+### `POST /api/v1/trees`
+
+Create a new tree from a full `Tree` JSON. Used by `scripts/seed_tree.py` and by future authoring UIs.
+
+**Request:** a serialized `Tree`.
+**Response 201:** the persisted `Tree`.
+**Errors**
+- `409 conflict` — tree id already exists.
+- `400 invalid` — duplicate node ids within the tree, or any Pydantic validation failure (422).
+
+### `PUT /api/v1/trees/{tree_id}`
+
+Replace a tree wholesale. The body's `Tree.id` must match the URL `tree_id`. Internally this wipes the tree's `nodes` rows and re-inserts — small trees and atomic transactions make the simple approach correct.
+
+**Errors**
+- `400 invalid` — body id ≠ URL id.
+- `404 not_found` — tree doesn't exist.
+
+### `DELETE /api/v1/trees/{tree_id}`
+
+Removes the tree and (via `ON DELETE CASCADE`) all its nodes. Returns `204 No Content`.
+
+**Errors**
+- `404 not_found`.
 
 ### `GET /api/v1/trees/{tree_id}/nodes/{node_id}`
 
-A single node's full record, including `detail`. Used when the user clicks a node in the viz to read it.
+A single node, including `detail` and breadcrumbs.
 
-**Response 200**
 ```json
 {
   "node": { "id": "...", "title": "...", "description": "...", "detail": "...", "children": [...], "tags": [] },
-  "breadcrumbs": [
-    { "id": "cs", "title": "Computer science" },
-    { "id": "cs.languages", "title": "Programming languages" }
-  ]
-}
-```
-
-### `POST /api/v1/query`
-
-Start an agent run. Returns a `run_id`; the response does **not** contain the answer. The client subscribes to `/events/{run_id}` to receive the trace and final answer.
-
-**Request**
-```json
-{
-  "tree_id": "cs",
-  "query": "How does Python's asyncio event loop work?",
-  "model": "gpt-4.1-mini",
-  "params": {
-    "max_depth": 5,
-    "beam_width": 1,
-    "show_grandchildren": false
-  }
-}
-```
-
-`model` is optional; defaults to `SACE_MODEL` env. **The server rejects any non-mini model** (see [04-tech-stack.md](../00-overview/04-tech-stack.md)).
-
-**Response 202**
-```json
-{
-  "run_id": "01HQX...",
-  "events_url": "/api/v1/events/01HQX..."
+  "breadcrumbs": [ { "id": "cs", "title": "Computer science", "description": "..." }, ... ]
 }
 ```
 
 **Errors**
-- `400 invalid_query` — empty query, query too long.
-- `400 invalid_model` — non-mini model requested.
-- `404 tree_not_found`.
+- `404 not_found` — node not present in that tree.
 
-### `GET /api/v1/events/{run_id}` (SSE)
+---
 
-The live event stream for a run. See [02-sse-streaming.md](./02-sse-streaming.md) for protocol details and [03-event-schema.md](./03-event-schema.md) for event shapes.
+## Conversations
 
-`Content-Type: text/event-stream`. The connection stays open until the run completes or the client disconnects.
+### `POST /api/v1/conversations`
 
-### `GET /api/v1/runs/{run_id}`
+Create a new conversation bound to a tree.
 
-Full record of a finished or in-flight run.
+**Request**
+```json
+{ "tree_id": "cs" }
+```
 
-**Response 200**
+**Response 201**
 ```json
 {
-  "run_id": "01HQX...",
+  "id": "01HQX...",
   "tree_id": "cs",
-  "query": "...",
-  "model": "gpt-4.1-mini",
-  "status": "running|completed|cancelled|error",
-  "trace": [ /* TraceStep[] */ ],
-  "final_answer": "...",
-  "stop_reason": "agent_stop",
-  "started_at": "...",
-  "finished_at": "...",
-  "totals": { "steps": 4, "input_tokens": 4123, "output_tokens": 612, "latency_ms": 2890 }
+  "created_at": "2026-05-23T14:01:09Z",
+  "messages": []
 }
 ```
 
-If the run is still in-flight, `trace` reflects steps so far and `final_answer` is absent. This endpoint is the "give me everything" alternative to subscribing to SSE.
+In v1 we typically keep one conversation per session; the frontend creates one on app boot.
 
-### `GET /api/v1/runs/{run_id}/steps/{idx}`
+### `GET /api/v1/conversations/{conversation_id}`
 
-A single trace step with the **full** prompt (the SSE event truncates). Used by the trace panel's "show full prompt" toggle.
+Full conversation with all messages.
+
+```json
+{
+  "id": "...",
+  "tree_id": "cs",
+  "created_at": "...",
+  "messages": [
+    {
+      "id": "...",
+      "role": "user",
+      "content": "How does Python's asyncio event loop work?",
+      "created_at": "...",
+      "status": "completed"
+    },
+    {
+      "id": "...",
+      "role": "assistant",
+      "content": "# Async in Python\n\nPython's asyncio uses...",
+      "run_id": "01HQY...",
+      "created_at": "...",
+      "status": "completed"
+    },
+    ...
+  ]
+}
+```
+
+### `POST /api/v1/conversations/{conversation_id}/messages`
+
+Submit a new user message. Triggers an agent run for the assistant reply.
+
+**Request**
+```json
+{
+  "text": "How does Python's asyncio event loop work?",
+  "model": "gpt-4.1-mini",
+  "params": { "max_depth": 5, "beam_width": 1, "show_grandchildren": false }
+}
+```
+
+`model` and `params` are optional. The server **rejects any non-mini model** (see [00-overview/04-tech-stack.md](../00-overview/04-tech-stack.md)).
+
+**Response 202**
+```json
+{
+  "user_message_id": "01HQU...",
+  "assistant_message_id": "01HQV...",
+  "run_id": "01HQW...",
+  "events_url": "/api/v1/events/01HQW..."
+}
+```
+
+The client then opens an SSE connection to `events_url` (or to the multiplexed conversation stream — see SSE doc).
+
+### `GET /api/v1/conversations/{conversation_id}/messages/{message_id}`
+
+A single message. The assistant message includes its `run_id`; clients usually go straight to `GET /runs/{run_id}` from there.
+
+### `POST /api/v1/conversations/{conversation_id}/export`
+
+Returns the conversation **plus** the full `AgentState` for every assistant message, in one JSON blob. The frontend's "Export" button downloads this directly. Git-friendly.
+
+```json
+{
+  "conversation": { ... },                  // full Conversation
+  "runs": {
+    "01HQW...": { /* AgentState */ },
+    "01HQZ...": { /* AgentState */ }
+  }
+}
+```
+
+### `POST /api/v1/conversations/import`
+
+Accepts an exported JSON and rehydrates the in-memory conversation + runs. Useful for sharing reproducible debug sessions.
+
+---
+
+## Runs (per-message detail)
+
+### `GET /api/v1/runs/{run_id}`
+
+Full `AgentState` for one run. **This endpoint is the heart of the replay feature.**
+
+```json
+{
+  "run_id": "01HQW...",
+  "conversation_id": "01HQT...",
+  "message_id": "01HQV...",
+  "tree_id": "cs",
+  "query": "How does Python's asyncio event loop work?",
+  "model": "gpt-4.1-mini",
+  "policy": { "max_depth": 5, ... },
+  "started_at": "...", "finished_at": "...",
+  "cursor_id": "cs.languages.python.async.event-loop",
+  "depth": 4,
+  "visited_ids": ["cs", "cs.languages", "cs.languages.python", "cs.languages.python.async", "cs.languages.python.async.event-loop"],
+  "trace": [
+    {
+      "step_idx": 0,
+      "node_id": "cs",
+      "messages_in": [ {"role": "system", "content": "..."}, {"role": "user", "content": "<context>...</context>"} ],
+      "raw_output": "<decision>...</decision>",
+      "thinking": { "text": "The user asks about asyncio...", "is_synthetic": true },
+      "tool_calls": [],
+      "decision": { "kind": "descend", "child_id": "cs.languages", "reasoning": "...", "confidence": 0.88 },
+      "model": "gpt-4.1-mini",
+      "prompt_template_version": "router_v1",
+      "started_at": "...", "finished_at": "...",
+      "latency_ms": 410,
+      "input_tokens": 932, "output_tokens": 64
+    },
+    ...
+  ],
+  "answer": {
+    "messages_in": [ ... ],
+    "raw_output": "# Async in Python\n\n...",
+    "final_text": "# Async in Python\n\n...",
+    "model": "gpt-4.1-mini",
+    "prompt_template_version": "answer_v1",
+    "started_at": "...", "finished_at": "...",
+    "latency_ms": 1240,
+    "input_tokens": 2100, "output_tokens": 480
+  },
+  "final_answer": "# Async in Python\n\n...",
+  "stop_reason": "leaf"
+}
+```
+
+The frontend's debug panel and tree-overlay view both render entirely from this payload.
+
+### `GET /api/v1/runs/{run_id}/steps/{step_idx}`
+
+A single trace step. Identical content to `runs[run_id].trace[step_idx]` — exists as a convenience for the "show full prompt" foldouts (which can lazy-load instead of carrying the full trace eagerly).
 
 ### `POST /api/v1/runs/{run_id}/cancel`
 
-Idempotent. Marks the run as cancelled; the agent loop exits at the next safe point (between LLM calls).
+Idempotent. Marks the run as cancelled; the agent loop exits at the next safe point (between LLM calls). The associated message status becomes `cancelled`.
 
-**Response 200**: `{"run_id": "...", "status": "cancelled"}`.
+```json
+{ "run_id": "...", "status": "cancelled" }
+```
 
-### `POST /api/v1/admin/reload` (dev only)
+---
 
-Reload trees from disk. Optional query param `?tree_id=cs` to reload a single tree.
+## Events (SSE)
+
+### `GET /api/v1/events/{run_id}` (SSE)
+
+Per-run event stream. See [02-sse-streaming.md](./02-sse-streaming.md) and [03-event-schema.md](./03-event-schema.md).
+
+### `GET /api/v1/conversations/{conversation_id}/stream` (SSE, optional)
+
+Multiplexed stream: events from every active run in the conversation, with `run_id` on each event. Lets the chat panel subscribe once and route events to the right assistant message. Behaves identically to N parallel `GET /events/{run_id}` connections.
+
+---
+
+## Admin (dev only)
+
+### `POST /api/v1/admin/reload`
+
+Re-seed trees from `data/trees/*.json` for trees that don't yet exist in the DB. Idempotent. Optional `?tree_id=cs` to attempt only one file. (To force-replace, use `PUT /api/v1/trees/{tree_id}` with a freshly loaded JSON body.)
+
+---
 
 ## Why this shape
 
-- **`POST /query` returns a run id, not an answer.** The answer comes via SSE. Trying to keep an HTTP connection open for the full multi-step run is fragile; SSE is the right transport.
-- **`/runs` is the cold-store mirror of the SSE.** Anything you saw stream can be re-fetched as JSON.
-- **No PATCH on trees.** Trees are immutable per process.
-- **No PATCH on runs.** Cancellation is the only state transition the client can drive; everything else is server-internal.
-
-## CORS
-
-Dev allows `http://localhost:5173`. Configured in `sace/api/app.py`. We do not enable cookies; everything is API-key headers if it ever needs auth.
+- **Conversation is first-class.** Messages and runs are children of a conversation. Lookup is `conversation → message → run` — exactly the path the debugger needs.
+- **`POST /messages` is the only write that triggers work.** Everything else is reads.
+- **`GET /runs/{id}` is the heart of replay.** Saving the full `AgentState` and serving it back is what makes both debug views deterministic and offline-friendly.
+- **Export/import is manual persistence.** No DB; a JSON blob and a button. Cheap.
 
 ## OpenAPI
 
-FastAPI generates `/openapi.json` and `/docs` for free. We rely on it; no hand-written OpenAPI.
+FastAPI generates `/openapi.json` and `/docs` for free. We rely on it.
+
+## CORS
+
+Dev allows `http://localhost:5173` and `http://127.0.0.1:5173`. No cookies — bearer header if we ever add auth.
