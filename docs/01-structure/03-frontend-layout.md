@@ -1,59 +1,78 @@
 # Frontend layout
 
-The frontend is a Vite + React + TypeScript SPA. Code is grouped by **feature**, not by file type — so the three big regions of the UI (tree, chat, trace) each own their own folder.
+The frontend is a Vite + React + TypeScript SPA. Code is grouped by **feature**, not by file type — so the three big regions of the playground UI (tree, chat, trace) each own their own folder.
+
+> **Status — experimental.** The tree below is what currently exists. `App.tsx` is a router (three routes), not a single shell. The playground (`/playground`) is mock-data-only — none of the `api/` modules are wired into it yet; the tree CRUD pages do hit the backend through React Query.
 
 ```
 frontend/
 ├── index.html
-├── package.json
-├── tsconfig.json
+├── package.json                     # @xyflow/react v12, react-router-dom v6,
+│                                    # @tanstack/react-query, zustand, react-markdown,
+│                                    # d3-hierarchy, tailwind
+├── tsconfig.json                    # "@/*": ["src/*"]
 ├── vite.config.ts
 ├── tailwind.config.js
 ├── postcss.config.js
-├── .env.local                       # VITE_API_URL=http://localhost:8000
+├── .env.example                     # VITE_API_URL=http://localhost:8000
 │
 ├── public/
-│   └── favicon.svg
+│   └── (favicon, etc.)
 │
 └── src/
-    ├── main.tsx                     # bootstraps React, providers
-    ├── App.tsx                      # the three-panel shell
-    ├── index.css                    # tailwind base
+    ├── main.tsx                     # bootstraps React, providers (BrowserRouter, QueryClient)
+    ├── App.tsx                      # <Routes>: / → TreeListPage, /trees/:id → TreeWorkspacePage,
+    │                                #          /playground → PlaygroundPage
+    ├── index.css                    # tailwind base + color-scheme: dark
     │
-    ├── api/                         # transport — REST + SSE
+    ├── pages/                       # ← NEW vs. earlier spec
+    │   ├── TreeListPage.tsx         # list / create / delete trees (CRUD via React Query)
+    │   ├── TreeWorkspacePage.tsx    # outline + node editor + chat placeholder
+    │   └── PlaygroundPage.tsx       # the four-region debugger shell
+    │
+    ├── api/                         # transport — REST + (planned) SSE
     │   ├── client.ts                # fetch wrapper, base URL, error envelope
-    │   ├── trees.ts                 # getTree(id), listTrees()
-    │   ├── query.ts                 # postQuery({ tree_id, query }) → { run_id }
-    │   └── events.ts                # subscribeEvents(run_id, onEvent) — wraps EventSource
+    │   ├── trees.ts                 # listTrees, getTree, createTree, updateTree, deleteTree
+    │   ├── query.ts                 # (planned) postQuery({ tree_id, query }) → { run_id }
+    │   └── events.ts                # (planned) subscribeEvents(run_id, onEvent) — wraps EventSource
     │
     ├── types/
     │   ├── generated.ts             # ← auto-generated from Pydantic; do not edit
     │   └── index.ts                 # re-exports + UI-only helpers
     │
-    ├── store/                       # Zustand store(s)
-    │   ├── traceStore.ts            # current run, steps, cursor, breadcrumbs
-    │   ├── chatStore.ts             # message history
-    │   └── uiStore.ts               # panel sizes, selected node
+    ├── data/                        # ← NEW: mock fixtures
+    │   └── mockData.ts              # CS tree + 2 conversations + 5 completed runs
+    │
+    ├── store/                       # Zustand stores
+    │   ├── traceStore.ts            # runs keyed by run_id (seeded from mockData)
+    │   ├── chatStore.ts             # conversations, activeConversationId, model (MODELS = …)
+    │   └── uiStore.ts               # selectedNodeId, debugTarget, debugMode, selectedStepIdx,
+    │                                #   sidebarOpen
     │
     ├── features/
     │   ├── tree/
-    │   │   ├── TreePanel.tsx        # the React Flow surface
-    │   │   ├── TreeNode.tsx         # custom node renderer
-    │   │   ├── layout.ts            # tidy-tree / dagre layout helper
-    │   │   ├── highlights.ts        # apply current/visited/considered styles
-    │   │   └── hooks.ts             # useTree(), useNodeFocus()
+    │   │   ├── TreePanel.tsx        # the React Flow surface (used by PlaygroundPage)
+    │   │   ├── TreeNode.tsx         # custom node renderer (highlight: visited|cursor|step)
+    │   │   ├── TreeOutline.tsx      # textual outline (used by TreeWorkspacePage)
+    │   │   ├── NodeEditor.tsx       # node form (used by TreeWorkspacePage)
+    │   │   ├── treeUtils.ts         # findNode, updateNodeInTree
+    │   │   ├── layout.ts            # d3-hierarchy → React Flow positions
+    │   │   ├── highlights.ts        # apply current/visited/considered styles  (currently empty / placeholder)
+    │   │   └── hooks.ts             # useTree(id) — TanStack Query wrapper
     │   │
     │   ├── chat/
-    │   │   ├── ChatPanel.tsx
-    │   │   ├── MessageList.tsx
-    │   │   ├── MessageInput.tsx
-    │   │   └── hooks.ts             # useSendQuery()
+    │   │   ├── ChatPanel.tsx        # used by PlaygroundPage
+    │   │   ├── ConversationSidebar.tsx   # ← NEW: brand, model pills, conv list
+    │   │   ├── MessageList.tsx      # bubbles + per-message RouteSummary pill
+    │   │   ├── MessageInput.tsx     # single-line input (planned: textarea + Cmd+Enter)
+    │   │   ├── AgentPlaceholder.tsx # used by TreeWorkspacePage (chat is unimplemented there)
+    │   │   └── hooks.ts             # useSendMessage() — currently a 600 ms mock
     │   │
     │   └── trace/
-    │       ├── TracePanel.tsx       # collapsible side panel listing steps
-    │       ├── StepCard.tsx         # one routing decision card
-    │       ├── PromptPreview.tsx    # toggle to see raw prompt
-    │       └── hooks.ts             # useLiveTrace(run_id)
+    │       ├── TracePanel.tsx       # message selector + run meta + step cards + final answer
+    │       ├── StepCard.tsx         # one routing decision (foldouts: thinking, prompt, raw, metrics)
+    │       ├── PromptPreview.tsx    # planned — placeholder for raw-prompt viewer
+    │       └── hooks.ts             # (currently empty) — will host useLiveTrace(run_id)
     │
     ├── components/                  # shared dumb components
     │   ├── Panel.tsx

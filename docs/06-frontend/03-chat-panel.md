@@ -2,6 +2,41 @@
 
 Right side of the screen. The user's input surface and the live narration of the agent's work. Modeled on modern AI coding tools (Cursor, Claude Code, Cline): the assistant message **unfolds in place** as the agent thinks, picks tools, and produces its answer.
 
+> **Status — experimental.** The "Cursor-style" foldouts described below are the **target design**. What ships today is simpler: a flat assistant bubble with the final markdown answer plus a single collapsible **"route summary" pill** under it (visited-id breadcrumb + per-step `node → child` lines + a "Debug this" button that sets `uiStore.debugTarget`). No streaming exists yet — the chat is fed from pre-baked `AgentRun` records in `mockData.ts`. The user input is a single-line `<input>` with a "Send" button; submitting fakes a 600 ms delay and inserts a placeholder assistant message that points the reader at the debug panel.
+
+## What ships today
+
+```
+┌──────────────────────────────────────────────────────────┐
+│  [user] How does Python's asyncio event loop work?        │
+│                                                          │
+│  [ai]   ## Python's asyncio Event Loop                    │
+│         Python's `asyncio` module implements …            │  ← full markdown answer
+│                                                          │
+│         ⬡ cs → cs.languages → …python → …python.async ▼  │  ← collapsed route pill
+│                                                          │
+│         (expanded) #0  cs            → cs.languages       │
+│                    #1  cs.languages  → …python            │
+│                    #2  …python       → …python.async      │
+│                    ✓ cs.languages.python.async            │
+│                    [Debug this]                           │
+└──────────────────────────────────────────────────────────┘
+```
+
+| Piece | Status |
+|---|---|
+| `ChatPanel.tsx` (header with model + tree_id chips) | ✅ shipped |
+| `MessageList.tsx` (auto-scroll on new message) | ✅ shipped |
+| `MessageInput.tsx` (single-line input, button) | ✅ shipped — multi-line + Cmd+Enter is **planned** |
+| `RouteSummary` collapsible pill | ✅ shipped |
+| `useSendMessage()` (mock — appends user msg, fakes an assistant reply after 600 ms) | ✅ shipped |
+| Cursor-style `Thinking` / `Steps` / `Answer` foldouts | **planned** — needs SSE first |
+| Streaming, concurrent runs, error variant | **planned** |
+| Suggested-prompts empty state | **planned** |
+| Settings cog → side sheet | **planned** |
+
+The rest of this doc describes the **target design**.
+
 ## What "Cursor-style" means here
 
 When the agent runs, the assistant bubble in the chat is not just "..." until the answer arrives. It expands to show, in order:
@@ -44,11 +79,19 @@ The three foldouts (thinking, steps, answer) are independently collapsible. Whil
 
 ## Components
 
-- `ChatPanel.tsx` — composition
-- `MessageList.tsx` — virtualized list (only past ~50 messages; v1 doesn't need it)
-- `MessageInput.tsx` — textarea + send button; cmd/ctrl+enter submits
-- `UserMessage.tsx` — simple bubble
-- `AssistantMessage.tsx` — the rich, foldable bubble described above
+Current files in `frontend/src/features/chat/`:
+
+- `ChatPanel.tsx` — composition (header + list + input)
+- `MessageList.tsx` — flat list; user/assistant bubbles inline; `RouteSummary` rendered for any assistant message that has a `run_id`
+- `MessageInput.tsx` — single-line `<input>` + send button (target: textarea + Cmd+Enter)
+- `ConversationSidebar.tsx` — model picker, conversation list, new-conversation button
+- `AgentPlaceholder.tsx` — used by the **tree editor** (`/trees/:treeId`), not the playground
+- `hooks.ts` — `useSendMessage` (mock)
+
+Target decomposition (not yet split out):
+
+- `UserMessage.tsx`
+- `AssistantMessage.tsx`
   - `ThinkingFoldout.tsx`
   - `StepsFoldout.tsx`
     - `StepLine.tsx`
@@ -56,6 +99,8 @@ The three foldouts (thinking, steps, answer) are independently collapsible. Whil
   - `MetaBar.tsx` — totals + action buttons (set debug target, open in tree, copy)
 
 ## Submit flow
+
+> **Status: planned.** Today `useSendMessage` is a 30-line mock that adds a user message and 600 ms later adds a placeholder assistant reply (`"Backend not connected. This is a mock UI…"`). The target flow once SSE lands:
 
 ```ts
 async function send(text: string) {
@@ -77,7 +122,9 @@ We do **not** disable the input while streaming. The user may type the next mess
 
 ## Selecting a message to debug
 
-Clicking the meta bar's `[set as debug target]` (or just clicking the assistant message bubble) sets `uiStore.debugTarget = message.run_id`. The selected message gets a `◀` indicator; the tree overlay and the debug panel switch to that run.
+**Today:** the route-summary pill under each assistant message expands to show per-step lines and a **`[Debug this]` / `[Debugging ✓]`** button. Clicking it sets `uiStore.debugTarget = message.run_id`. The tree overlay + debug panel switch immediately; a banner appears across the top.
+
+**Planned:** clicking anywhere on the assistant bubble (not only the button), and a `◀` indicator on the targeted message inside the chat itself.
 
 **The chat keeps streaming the *current* turn unaffected.** Inspecting message #3 while message #6 is being produced does not pause #6. (GPS analogy: looking at Tuesday's trip doesn't pause today's navigation.)
 
@@ -86,6 +133,9 @@ There's a subtle UX choice: should the debug target *follow* new live messages b
 A small chip near the input shows: `Debug target: msg #3 [unpin]` whenever a non-live target is pinned.
 
 ## Streaming behavior, in detail
+
+> **Status: planned.** Mock data ships with completed runs; nothing streams today.
+
 
 | Event | Effect in the assistant message bubble |
 |---|---|
@@ -111,6 +161,10 @@ The status badge in the top bar shows `streaming · 2`. The "Debug target" dropd
 
 ## Markdown rendering
 
+**Today:** plain `react-markdown` with `prose prose-invert prose-sm` styling. No GFM plugin, no syntax highlight, no copy button. Mock answers include tables and fenced code blocks; tables render as raw text, code fences render unstyled.
+
+**Planned:** the original spec —
+
 `react-markdown` with:
 - `remark-gfm` for tables, task lists.
 - `rehype-highlight` for code fences.
@@ -120,7 +174,9 @@ We don't render raw HTML from the model. `disallowedElements` blocks anything da
 
 ## Empty state
 
-Before the first user message:
+**Today:** if the conversation is empty, the message list shows a single line: *"Ask a question about the knowledge tree"*. No prompts, not clickable.
+
+**Planned:** clickable suggested prompts that submit through `useSendMessage`. The seeded mock conversations happen to answer these exact queries, so they're a natural fit:
 
 ```
 Ask a question. The agent will traverse the tree and show each decision.
@@ -128,13 +184,17 @@ Pick any past message to inspect its trip on the tree or step-by-step.
 
 Try one of:
   • How does Python's asyncio event loop work?
-  • What is RAII in Rust?
-  • What's the difference between TCP and UDP?
+  • What is Dijkstra's algorithm and when should I use it?
+  • Explain Rust's borrow checker
 ```
 
 Suggested prompts are static for v1.
 
 ## Settings
+
+> **Status: not built.** The only setting exposed today is the **model** picker (two pills at the top of `ConversationSidebar.tsx`: `gpt-4.1-mini`, `gpt-4o-mini`). No cog, no side sheet.
+
+Target settings (when added):
 
 A cog icon opens a side sheet (not a modal). Settings:
 - Tree (dropdown — only one in v1 typically)
@@ -155,7 +215,7 @@ Some agent UIs put thinking and tool calls in a separate side panel. We delibera
 
 ## Error display
 
-If the SSE stream emits `error` with `fatal: true`, the assistant message becomes an error variant:
+> **Status: planned.** No error path exists today (mock data only). When the SSE stream emits `error` with `fatal: true`, the assistant message should become an error variant:
 
 ```
 [ai] ⚠ The agent stopped: parse_failed (after 2 retries).
@@ -163,3 +223,15 @@ If the SSE stream emits `error` with `fatal: true`, the assistant message become
 ```
 
 "Show steps" expands the steps foldout. "Show tree" sets the debug target to this run and switches the mode toggle to `tree-overlay` so you can see where the walk failed.
+
+## Future improvements
+
+1. **Multi-line textarea** + Cmd/Ctrl+Enter to submit + kbd hint under the input.
+2. **Suggested prompts** in the empty state, wired to `useSendMessage`.
+3. **Cursor-style foldouts** in the assistant bubble (thinking → steps → answer), independently collapsible. Worth doing once a real stream exists.
+4. **Markdown polish** — `remark-gfm` for tables, `rehype-highlight` for code, copy-button on code blocks.
+5. **Meta bar** under each assistant bubble — totals (latency, tokens) + action buttons (set debug target, open in tree, copy).
+6. **`◀ debug target`** indicator on the targeted message inside the chat itself (not only in the debug panel).
+7. **Error variant** for runs that fail.
+8. **Settings side sheet** (cog icon) — see "Settings" above.
+9. **Tree picker** in the sidebar — today the tree is hard-coded to `example-cs` via `Conversation.tree_id`.

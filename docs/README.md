@@ -14,7 +14,7 @@ Read in order if you are new. Each numbered section assumes the previous one.
 
 | # | Section | What you'll get |
 |---|---------|-----------------|
-| 00 | [Overview](./00-overview/) | Vision, the core idea, big-picture architecture, tech stack |
+| 00 | [Overview](./00-overview/) | Vision, the core idea, big-picture architecture, tech stack, and the small-model / progressive-zoom thesis |
 | 01 | [Structure](./01-structure/) | The monorepo layout, backend layout, frontend layout |
 | 02 | [Data model](./02-data-model/) | `Node`, tree operations, storage, Conversation/Message schema, **SQLAlchemy DB & ORM** |
 | 03 | [Agent](./03-agent/) | LangGraph state, the traversal algorithm, step recording, **multi-turn runs** |
@@ -25,6 +25,9 @@ Read in order if you are new. Each numbered section assumes the previous one.
 
 The most important docs in this whole folder:
 
+- [00-overview/05-the-idea.md](./00-overview/05-the-idea.md) — the thesis: spread the data, spread the decisions
+- [00-overview/06-progressive-zoom.md](./00-overview/06-progressive-zoom.md) — the Google-Maps zoom metaphor
+- [00-overview/07-emergence-from-ingredients.md](./00-overview/07-emergence-from-ingredients.md) — why small parts can stand in for unknown wholes
 - [03-agent/03-traversal-algorithm.md](./03-agent/03-traversal-algorithm.md) — what the agent actually does
 - [06-frontend/04-debug-panel.md](./06-frontend/04-debug-panel.md) — the dual-view debugger (the project's centerpiece)
 - [06-frontend/05-tree-overlay-debug.md](./06-frontend/05-tree-overlay-debug.md) — how the tree visualizes a selected message's run
