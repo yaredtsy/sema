@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { createTree, deleteTree, listTrees } from "@/api/trees";
 import { Spinner } from "@/components/Spinner";
 import type { Tree } from "@/types";
@@ -22,6 +22,7 @@ function emptyTree(id: string, name: string): Tree {
 
 export function TreeListPage() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const { data, isLoading, error } = useQuery({
     queryKey: ["trees"],
     queryFn: listTrees,
@@ -90,7 +91,14 @@ export function TreeListPage() {
               </Link>
               <button
                 type="button"
-                className="ml-4 rounded border border-slate-700 px-2 py-1 text-xs text-slate-400 hover:border-rose-700 hover:text-rose-400"
+                className="ml-4 rounded bg-sky-700 px-3 py-1 text-xs font-medium text-white hover:bg-sky-600"
+                onClick={() => navigate(`/playground?tree=${tree.id}`)}
+              >
+                ▶ Run tree
+              </button>
+              <button
+                type="button"
+                className="ml-2 rounded border border-slate-700 px-2 py-1 text-xs text-slate-400 hover:border-rose-700 hover:text-rose-400"
                 onClick={() => {
                   if (confirm(`Delete tree "${tree.name}"?`)) {
                     remove.mutate(tree.id);

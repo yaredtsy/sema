@@ -1,6 +1,6 @@
 # State & data flow
 
-> **Status — design.** Today the playground reads only from Zustand stores seeded with mock fixtures. The target is three clearly-separated layers — **URL**, **React Query (server cache)**, **Zustand (live + ephemeral)** — each with a single home and a single role. Folder locations are in [03-folder-structure.md](./03-folder-structure.md).
+> **Status — design.** Today the playground reads only from Zustand stores seeded with mock fixtures. The target is three clearly-separated layers — **URL**, **React Query (server cache)**, **Zustand (live + ephemeral)** — each with a single home and a single role. The streaming shape is **LangGraph-native** (see [06-chat-history.md](./06-chat-history.md) for the message schema and [07-agent-wiring.md](./07-agent-wiring.md) for the stream). Folder locations are in [03-folder-structure.md](./03-folder-structure.md).
 
 The rule of thumb, with no exceptions:
 
@@ -58,8 +58,8 @@ This table is the contract. **No state appears twice.** If a region needs someth
 | The tree definition | React Query `['tree', treeId]` | `usePlaygroundTree()` |
 | Conversation list for a tree | React Query `['conversations', treeId]` | `useConversations()` |
 | One conversation + its messages | React Query `['conversation', conversationId]` | `useMessages()` |
-| One completed run | React Query `['run', runId]` | `useRun(runId)` |
-| One live (streaming) run | `useRunsStore.runs[run_id]` | `useLiveTrace(runId)` |
+| One completed run | React Query `['run', runId]` (Run row with `checkpoint`) | `useRun(runId)` |
+| One live (streaming) run | `useRunsStore.runs[run_id]` (accumulated `AIMessageChunk`s + `ToolMessage`s) | `useLiveTrace(runId)` |
 | Selected tree node (click on canvas) | `useUiStore.selectedNodeId` | `useUiStore(s => s.selectedNodeId)` |
 | Composer draft for the open conv | `useChatStore.drafts[conv]` (localStorage) | `useComposerDraft(conv)` |
 | Sidebar open / closed | `useUiStore.sidebarOpen` (localStorage) | `useUiStore(s => s.sidebarOpen)` |
@@ -101,36 +101,37 @@ User submits text in Composer
         │
         ▼
 useSendMessage().mutate({ text, model })
-   1. optimistic insert into useChatStore:
-        - userMsg  (id: local-uuid, status: sent)
-        - asstMsg  (id: local-uuid, status: pending, run_id: undefined)
-      onSnapshot ── React Query setQueryData(['conversation', conv]) so
-                    MessageList re-renders immediately
-   2. POST /conversations/:conv/messages { text, model }
-        → { user_message_id, assistant_message_id, run_id }
-   3. useChatStore.reconcile(localUserId → user_message_id,
-                             localAsstId → assistant_message_id,
-                             run_id)
+   1. optimistic insert into useChatStore.optimisticByConv[conv]:
+        - HumanMessage row (local id, delivery_status: 'pending')
+        - AIMessage stub  (local id, delivery_status: 'pending', run_id: undefined)
+      MessageList re-renders immediately (merges optimistic with React Query data)
+   2. POST /conversations/:conv/messages { content: text, model }
+        → { human_message_id, run_id, thread_id }
+   3. useChatStore.reconcileIds(localHumanId → human_message_id, runId: run_id)
       Invalidate ['conversation', conv] so the canonical list refetches.
-   4. Open EventSource(/events/<run_id>)
-      Subscribe in useRunsStore.openRun(run_id, …)
-   5. SSE events arrive:
-        step    → useRunsStore.appendStep(run_id, step)
-                  (TracePanel re-renders)
-        visit   → useRunsStore.appendVisit
-        final   → useChatStore.completeAssistant(assistant_message_id, content)
-                  useRunsStore.closeRun(run_id)
-        error   → useRunsStore.markError; mark assistant message error
-        done    → eventSource.close()
-                  Invalidate ['run', run_id] (so future replays use server JSON)
+   4. Open EventSource(/runs/<run_id>/stream)
+      useRunsStore.openRun(run_id, { conversation_id, thread_id })
+   5. SSE chunks arrive (LangGraph stream_mode forwarding):
+        messages (AIMessageChunk)  → accumulateChunk into runs[run_id].liveAi
+                                     TracePanel + ChatPanel.LiveTurn re-render
+        messages (ToolMessage)     → push onto runs[run_id].messages
+                                     parse payload.content.cursor → tree canvas
+        updates                    → annotate cards with langgraph_node
+        values                     → reconcile snapshot (late-subscriber catch-up)
+        error                      → useRunsStore.markError + chip on AI turn
+        done                       → finalizeChunks(liveAi) → push AIMessage
+                                     useRunsStore.closeRun(run_id)
+                                     eventSource.close()
+                                     Invalidate ['run', run_id] (server is now canonical)
+                                     Invalidate ['conversation', conv]
 ```
 
 Two important properties:
 
 - The user's bubble shows up before the network call returns.
-- The trace panel fills in step-by-step as SSE arrives — no need to wait for the run to complete.
+- The trace panel and chat strip fill in token-by-token as `AIMessageChunk`s arrive — no need to wait for the run to complete.
 
-If the EventSource drops, `lib/eventSource.ts` reconnects with exponential backoff up to 30 s. On reconnect it requests a replay buffer (server-side concern, see [05-api/02-sse-streaming.md](../../05-api/02-sse-streaming.md)) so the trace doesn't gap.
+If the EventSource drops, `lib/eventSource.ts` reconnects with exponential backoff up to 30 s. On reconnect it requests the latest `values` snapshot (`?from=values`) so the trace doesn't gap. See [07-agent-wiring.md](./07-agent-wiring.md#eventsource-lifecycle) for the protocol.
 
 ### 3. Debug — picking a past message
 
@@ -234,36 +235,54 @@ No async actions. Every action is a pure setter. Side effects (URL writes, query
 ```ts
 interface ChatState {
   // ephemeral local-only state
-  optimisticByConv: Record<string, OptimisticMessage[]>;
-  drafts: Record<string, string>;        // composer drafts, persisted
+  optimisticByConv: Record<string, MessageRow[]>;   // same shape as server MessageRow
+  drafts: Record<string, string>;                    // composer drafts, persisted to localStorage
   // actions
-  pushOptimistic: (convId: string, msg: OptimisticMessage) => void;
+  pushOptimistic: (convId: string, msg: MessageRow) => void;
   reconcileIds: (convId: string, localId: string, serverId: string,
                  runId?: string) => void;
   removeOptimistic: (convId: string, localId: string) => void;
-  completeAssistant: (convId: string, msgId: string, content: string) => void;
   setDraft: (convId: string, text: string) => void;
 }
 ```
 
-Optimistic messages live here until the server's canonical version arrives in React Query. `MessageList` merges `useMessages.data` with `useChatStore.optimisticByConv[conv]` for display.
+Optimistic messages use the same `MessageRow` shape as the server (wrapper + `payload: LangChainMessage`) so they slot into `MessageList` without translation. They live here until the server's canonical version arrives in React Query — at which point `reconcileIds` swaps the local id for the server id and the React Query refetch displaces the optimistic entry. `MessageList` merges `useMessages.data` with `optimisticByConv[conv]`, deduping by id, for display.
 
 ### `useRunsStore`
 
 ```ts
 interface RunsState {
   runs: Record<string, LiveRun>;
-  sources: Record<string, EventSource>;
-  openRun: (runId: string, meta: LiveRunMeta) => void;
-  appendStep: (runId: string, step: TraceStep) => void;
-  appendVisit: (runId: string, nodeId: string) => void;
-  closeRun: (runId: string, final: { answer: string; stop_reason: string }) => void;
-  markError: (runId: string, message: string) => void;
-  closeAllForConv: (convId: string) => void;
+  sources: Record<string, RunSubscription>;        // from lib/eventSource.ts
+  openRun:           (runId: string, meta: LiveRunMeta) => void;
+  appendMessagesEvent: (runId: string, chunk: AIMessageChunk | ToolMessage) => void;
+  appendUpdatesEvent:  (runId: string, update: { node: string; delta: unknown }) => void;
+  applyValuesSnapshot: (runId: string, values: { messages: LangChainMessage[] }) => void;
+  closeRun:          (runId: string, status: 'completed' | 'cancelled') => void;
+  markError:         (runId: string, message: string) => void;
+  closeAllForConv:   (convId: string) => void;
+}
+
+interface LiveRun {
+  run_id: string;
+  conversation_id: string;
+  thread_id: string;
+  status: 'running' | 'completed' | 'error' | 'cancelled';
+  messages: MessageRow[];                          // ToolMessages and finalized AIMessages
+  liveAi: AIMessageInProgress | null;              // the currently-streaming AIMessageChunk accumulator
+  cursor_id: string | null;                        // parsed from the latest goto_* ToolMessage
+  visited_ids: string[];
+  errorMessage?: string;
 }
 ```
 
-This store **only** holds live (streaming) runs. Once a run hits `done`, the server has the canonical `AgentState`; the next read goes through React Query. The store still keeps the run for the rest of the session so a user who's watching live doesn't see a flash on switch.
+`appendMessagesEvent` dispatches by chunk type:
+- `AIMessageChunk` → `liveAi = accumulateChunk(liveAi, chunk)`. On the final chunk of an AI turn (detected when the stream's next event is for a different message id, or when `done` fires), call `finalizeChunks(liveAi)` and push it onto `messages`.
+- `ToolMessage` → push directly onto `messages`. If it's a `goto_*` result, parse `payload.content` as JSON and update `cursor_id` and `visited_ids`.
+
+The reducer (`features/chat/lib/accumulateChunk.ts`) is pure — see [07-agent-wiring.md](./07-agent-wiring.md#reduction--events-to-state).
+
+This store **only** holds live (streaming) runs. Once a run hits `done`, the server has the canonical `Run.checkpoint`; the next read goes through React Query (`qk.run(runId)`). The store keeps the run for the rest of the session so a user watching live doesn't see a flash on switch.
 
 ## What does *not* live in Zustand
 
@@ -288,11 +307,12 @@ No `<Suspense>` boundary at the page level — each region handles its own loadi
 
 ## Type discipline
 
-- `frontend/src/types/generated.ts` is the **only** place that mirrors backend Pydantic. UI types extend it.
-- `playground/features/<x>/types.ts` only adds UI-only shapes (e.g., `OptimisticMessage`, `LiveRunMeta`).
+- **LangChain shapes are not redefined.** `features/chat/lib/langchainTypes.ts` mirrors `langchain_core.messages` (or re-exports from `@langchain/core/messages` if installed). Nothing else may declare `LCAi`, `LCTool`, `ToolCall`, etc.
+- `frontend/src/types/generated.ts` is the **only** place that mirrors backend Pydantic *non-LangChain* shapes (Tree, Conversation, Run, MessageRow wrapper). UI types extend it.
+- `playground/features/<x>/types.ts` only adds UI-only shapes (e.g., `LiveRun`, `LiveRunMeta`, `AIMessageInProgress`, `TurnGroup`).
 - A hook's return type is its public surface — always exported, always named.
 
-If a component needs a shape that's neither backend-derived nor declared in a feature `types.ts`, that's the smell. Add it where it belongs first.
+If a component needs a shape that's neither LangChain-derived, backend-derived, nor declared in a feature `types.ts`, that's the smell. Add it where it belongs first.
 
 ## What to read next
 

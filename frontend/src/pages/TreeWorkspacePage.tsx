@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { updateTree } from "@/api/trees";
 import { Panel } from "@/components/Panel";
 import { Spinner } from "@/components/Spinner";
@@ -14,6 +14,7 @@ import type { Tree } from "@/types";
 export function TreeWorkspacePage() {
   const { treeId } = useParams<{ treeId: string }>();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const { data: serverTree, isLoading, error } = useTree(treeId ?? null);
 
   const [draft, setDraft] = useState<Tree | null>(null);
@@ -79,14 +80,25 @@ export function TreeWorkspacePage() {
             />
           </div>
         </div>
-        <button
-          type="button"
-          className="rounded bg-sky-600 px-4 py-1.5 text-sm font-medium hover:bg-sky-500 disabled:opacity-40"
-          disabled={!dirty || save.isPending}
-          onClick={() => save.mutate(draft)}
-        >
-          {save.isPending ? "Saving…" : dirty ? "Save changes" : "Saved"}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className="rounded bg-sky-600 px-4 py-1.5 text-sm font-medium hover:bg-sky-500 disabled:opacity-40"
+            disabled={!dirty || save.isPending}
+            onClick={() => save.mutate(draft)}
+          >
+            {save.isPending ? "Saving…" : dirty ? "Save changes" : "Saved"}
+          </button>
+          <button
+            type="button"
+            className="rounded bg-emerald-700 px-4 py-1.5 text-sm font-medium text-white hover:bg-emerald-600 disabled:opacity-40 disabled:cursor-not-allowed"
+            disabled={dirty}
+            title={dirty ? "Save first to run" : "Open this tree in the playground"}
+            onClick={() => navigate(`/playground?tree=${treeId}`)}
+          >
+            ▶ Run tree
+          </button>
+        </div>
       </header>
 
       <div className="flex min-h-0 flex-1">

@@ -1,5 +1,5 @@
 import { BrowserRouter, Route, Routes } from "react-router-dom";
-import { PlaygroundPage } from "@/pages/PlaygroundPage";
+import { PlaygroundPage } from "@/playground";
 import { TreeListPage } from "@/pages/TreeListPage";
 import { TreeWorkspacePage } from "@/pages/TreeWorkspacePage";
 
